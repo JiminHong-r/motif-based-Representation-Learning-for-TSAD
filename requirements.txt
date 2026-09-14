@@ -1,10 +1,15 @@
-# Motif discovery backends (11 methods behind a common .fit() / .prediction_mask_ API)
-tsmd==0.1.4
+# Python 3.12 required.
+# TSB-AD pins numpy<2.0, and the last numpy 1.x (1.26.4) ships no cp313 wheels,
+# so a 3.13 venv cannot resolve. Create with:  python3.12 -m venv .venv
+numpy==1.26.4
 
-# LAMA / leitmotifs — 12th backend, needs its own adapter (no tsmd interface)
+# LAMA. NOTE: the distribution is `leitmotif`, but the import name is `leitmotifs`.
+# Not part of tsmd's common interface — needs its own adapter.
 leitmotif==0.3.5
 
-# TSB-AD: datasets, anomaly ground truth, VUS-PR evaluation.
-# Installed from the pinned submodule so the File_List CSVs and benchmark
-# scripts stay in sync with the evaluation code:
-#   pip install -e external/TSB-AD
+# Installed editable from the pinned submodules, so the source under external/
+# is exactly the code that runs (no drift against a separate PyPI copy):
+#   pip install -e external/TSMD     # 11 backends, .fit() / .prediction_mask_
+#   pip install -e external/TSB-AD   # datasets, labels, VUS-PR via get_metrics()
+-e external/TSMD
+-e external/TSB-AD
