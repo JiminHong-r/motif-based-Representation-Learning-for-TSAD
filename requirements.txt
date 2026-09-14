@@ -1,0 +1,10 @@
+# Motif discovery backends (11 methods behind a common .fit() / .prediction_mask_ API)
+tsmd==0.1.4
+
+# LAMA / leitmotifs — 12th backend, needs its own adapter (no tsmd interface)
+leitmotif==0.3.5
+
+# TSB-AD: datasets, anomaly ground truth, VUS-PR evaluation.
+# Installed from the pinned submodule so the File_List CSVs and benchmark
+# scripts stay in sync with the evaluation code:
+#   pip install -e external/TSB-AD

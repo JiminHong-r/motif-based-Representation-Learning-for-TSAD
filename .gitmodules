@@ -1,0 +1,6 @@
+[submodule "external/TSMD"]
+	path = external/TSMD
+	url = https://github.com/grrvlr/TSMD.git
+[submodule "external/TSB-AD"]
+	path = external/TSB-AD
+	url = https://github.com/TheDatumOrg/TSB-AD.git
