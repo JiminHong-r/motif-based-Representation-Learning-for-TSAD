@@ -1,9 +1,9 @@
 """RQ2, minimum viable version: turn a representation into an anomaly score.
 
 The distance-to-nearest-motif representation is already monotone in
-"anomalousness", so the minimal scorer is the identity plus a normalisation,
-and the minimal *detector* is a threshold on top of it. Anything smarter
-(kNN / IsolationForest over the representation) belongs to Phase 3.
+"anomalousness", so the minimal scorer is the identity plus a normalisation.
+Anything smarter (kNN / IsolationForest over the representation) belongs to
+Phase 3.
 """
 
 from __future__ import annotations
@@ -20,14 +20,7 @@ def minmax(score: np.ndarray) -> np.ndarray:
     return (score - low) / (high - low)
 
 
-def threshold_predictions(score: np.ndarray, k: float = 3.0) -> np.ndarray:
-    """Flag points more than `k` standard deviations above the mean score."""
-    score = np.asarray(score, dtype=np.float64)
-    cutoff = score.mean() + k * score.std()
-    return (score > cutoff).astype(int)
-
-
-def evaluate(score: np.ndarray, labels: np.ndarray, sliding_window: int, pred=None) -> dict:
+def evaluate(score: np.ndarray, labels: np.ndarray, sliding_window: int) -> dict:
     """TSB-AD's own metric suite, including VUS-PR."""
     from TSB_AD.evaluation.metrics import get_metrics
 
@@ -35,5 +28,4 @@ def evaluate(score: np.ndarray, labels: np.ndarray, sliding_window: int, pred=No
         np.asarray(score, dtype=np.float64),
         np.asarray(labels).astype(int),
         slidingWindow=int(sliding_window),
-        pred=pred,
     )
