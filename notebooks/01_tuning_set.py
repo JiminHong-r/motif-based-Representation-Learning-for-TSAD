@@ -41,10 +41,10 @@ KEEP = ["VUS-PR", "AUC-PR", "VUS-ROC", "AUC-ROC", "Standard-F1"]
 
 def backend_factories():
     from tsmd.competitors.locomotif import LocoMotif
-    from tsmd.competitors.motiflets import Motiflets
+    from tsmd.competitors.motiflets_numba import Motiflets_numba
 
     return {
-        "k-Motiflets": lambda lo, hi: Motiflets(k_max=10, min_wlen=lo, max_wlen=hi),
+        "k-Motiflets": lambda lo, hi: Motiflets_numba(k_max=10, min_wlen=lo, max_wlen=hi),
         "LoCoMotif": lambda lo, hi: LocoMotif(min_wlen=lo, max_wlen=hi),
     }
 
