@@ -46,17 +46,16 @@ Supervisor guidance: realistic VUS-PR is around 0.4–0.5; **don't overfit, don'
 - A **random-motif floor** (same number and lengths of occurrences, random positions) is computed on **every** series. VUS-PR's chance level is not 0 and varies per series, so results are only read relative to the floor on the same series.
 - Reference numbers (TSB-AD paper, 32 detectors, Eva split): best **Sub-PCA 0.423**, MatrixProfile 0.350, IForest 0.298. Newer leaderboard entries reach 0.586 (TimeRCD_MAFT). Published **per-series** VUS-PR for all 32 detectors exists for Eva only (`benchmark_exp/benchmark_eval_results/uni_mergedTable_VUS-PR.csv`), so the final Eval comparison does not require rerunning them — but the Tuning split does.
 
-## 5. What to do now — immediate next actions (in order)
+## 5. What to do now — after supervisor meeting 2026-09-29
 
-1. ~~**Finish and read the Tuning run.**~~ Done 2026-09-22 — see §6.
-2. **Run baseline detectors on the same 48 series**, with TSB-AD's own hyperparameters (`HP_list.py`) — no tuning on our side:
-   - *Ablation:* **MatrixProfile** — the same distance-to-nearest-subsequence idea without motif selection. If motifs don't beat it, motif selection adds nothing.
-   - *Direct competitors* — detectors that also build a library of normal patterns, differing only in how: **KShapeAD** (#2 on Eva), **Series2Graph** (#4), **KMeansAD**, **SAND**, **NORMA** (closest prior work; not in the published table).
-   - *Ceiling:* **Sub-PCA** (#1 of the 32 on Eva).
-   - Deep / foundation models are out of scope — cite their published numbers.
-   - Measure the runtime of Series2Graph and NORMA on the 650K-point series before launching all 48.
-3. **Queue k-Motiflets** (`Motiflets_numba`) over the Tuning split — ~7 h, run overnight.
-4. **Supervisor meeting** with the tables from 1–2 and the decisions in §7.
+**Goal reset:** see how far *existing* motif methods can go for anomaly detection — no new methods. Success is a ranking against all TSB-AD detectors on VUS-PR (ideal 1st, good top 5–10), shown as one plot of every method with ours highlighted. Still: don't overfit, don't over-optimise.
+
+1. **Per-motif distance features.** Each window → its distance to each discovered motif (≈10 motifs → 10 numbers), scaled to 0–1. Same shape as KMeansAD (distance to 10 centres), which scores high. Compare "nearest" (what we have now) with a detector on the feature vector.
+2. **Embedding + classifier.** Use that feature vector as an embedding; fit a detector/classifier on it, possibly weakly/semi-supervised on the training prefix.
+3. **Motif hyperparameters.** Sensitivity to the discovery settings, e.g. k-Motiflets `k_max`, LoCoMotif number of motifs. Report as sensitivity, pick one setting on Tuning.
+4. **Look into the data.** Which series / anomaly types work and which don't (TSB-AD tables carry `point_anomaly` / `seq_anomaly`, anomaly length, ratio); for the failing types, why, and what would fix them.
+5. **Leaderboard notebook.** Published per-series VUS-PR for 32 detectors on Eval (`benchmark_exp/benchmark_eval_results/uni_mergedTable_VUS-PR.csv`) plus newer ones (`benchmark_exp/leaderboard_results/`). Plot all methods, highlight ours.
+6. **Train/test split** — must be justified. Currently the method is unsupervised on the whole series (no split). TSB-AD's filename `tr_<end>` marks a training prefix: 5–47% of the series (median 25%), but on 7/48 Tuning series the first anomaly lies *inside* it, so it is not guaranteed anomaly-free.
 
 ## 6. Findings so far
 

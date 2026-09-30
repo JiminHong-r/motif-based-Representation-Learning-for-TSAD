@@ -71,39 +71,87 @@ def fit_mask(make_model, signal: np.ndarray) -> np.ndarray:
     return np.atleast_2d(np.asarray(model.prediction_mask_))
 
 
-def segmented_score(
-    signal: np.ndarray,
-    make_model,
-    period: int,
-    segment_len: int = SEGMENT_LEN,
-    mask_hook=None,
-) -> np.ndarray:
-    """Per-point distance-to-nearest-motif over a whole series.
+def discover(signal: np.ndarray, make_model, period: int, segment_len: int = SEGMENT_LEN) -> list:
+    """Run the backend on every segment. The slow step, so its output is cached.
+
+    Returns one (start, end, write_start, write_end, occurrences) per segment,
+    `occurrences` being (pattern, start, end) triples relative to the segment,
+    or None where the segment is too short to fit.
+    """
+    from representation import occurrences_from_mask
+
+    signal = np.asarray(signal, dtype=np.float64)
+    min_wlen, max_wlen = window_bounds(period)
+    out = []
+    for start, end, write_start, write_end in segment_spans(len(signal), segment_len, max_wlen):
+        occ = None
+        if end - start >= 4 * min_wlen:  # too short for motifs to be meaningful
+            occ = occurrences_from_mask(fit_mask(lambda: make_model(min_wlen, max_wlen), signal[start:end]))
+        out.append((start, end, write_start, write_end, occ))
+    return out
+
+
+def discover_cached(path, signal, make_model, period, segment_len: int = SEGMENT_LEN) -> list:
+    """`discover`, pickled to `path`; motif backends here are deterministic."""
+    import pickle
+    from pathlib import Path
+
+    path = Path(path)
+    if path.exists():
+        return pickle.loads(path.read_bytes())
+    segments = discover(signal, make_model, period, segment_len)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(pickle.dumps(segments))
+    return segments
+
+
+def score_segments(signal: np.ndarray, segments: list, mask_hook=None,
+                   represent=distance_to_nearest_motif, **rep) -> np.ndarray:
+    """Per-point distance-to-nearest-motif over a whole series, from `discover`.
 
     `mask_hook(mask)` may rewrite each segment's mask before scoring; the
     random-motif floor uses it to shuffle occurrence positions while keeping
-    their number and lengths.
+    their number and lengths. `rep` goes to `represent`.
     """
     signal = np.asarray(signal, dtype=np.float64)
-    min_wlen, max_wlen = window_bounds(period)
-    margin = max_wlen
     out = np.zeros(len(signal))
-
-    for start, end, write_start, write_end in segment_spans(len(signal), segment_len, margin):
-        chunk = signal[start:end]
-        if len(chunk) < 4 * min_wlen:  # too short for motifs to be meaningful
-            out[write_start:write_end] = 0.0
+    for start, end, write_start, write_end, occ in segments:
+        if not occ:  # segment too short, or backend found nothing here
             continue
-        mask = fit_mask(lambda: make_model(min_wlen, max_wlen), chunk)
+        mask = _segment_mask(occ, end - start)
         if mask_hook is not None:
             mask = mask_hook(mask)
-        if mask.sum() == 0:  # backend found nothing here
-            out[write_start:write_end] = 0.0
-            continue
-        local = distance_to_nearest_motif(chunk, mask)
+        local = represent(signal[start:end], mask, **rep)
         out[write_start:write_end] = local[write_start - start : write_end - start]
-
     return out
+
+
+def _segment_mask(occ: list, length: int) -> np.ndarray:
+    mask = np.zeros((max(p for p, _, _ in occ) + 1, length), dtype=np.int8)
+    for pattern, s, e in occ:
+        mask[pattern, s : e + 1] = 1
+    return mask
+
+
+def pooled_occurrences(segments: list, mask_hook=None) -> list:
+    """All segments' occurrences in series coordinates, one motif id per (segment, pattern)."""
+    from representation import occurrences_from_mask
+
+    out, next_id = [], 0
+    for start, end, _, _, occ in segments:
+        if not occ:
+            continue
+        mask = _segment_mask(occ, end - start)
+        if mask_hook is not None:
+            mask = mask_hook(mask)
+        out += [(next_id + p, start + s, start + e) for p, s, e in occurrences_from_mask(mask)]
+        next_id += mask.shape[0]
+    return out
+
+
+def segmented_score(signal, make_model, period, segment_len: int = SEGMENT_LEN, mask_hook=None, **rep):
+    """`discover` + `score_segments` in one call, uncached."""
+    return score_segments(signal, discover(signal, make_model, period, segment_len), mask_hook, **rep)
 
 
 def shuffle_mask(mask: np.ndarray, rng: np.random.Generator) -> np.ndarray:

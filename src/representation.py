@@ -8,9 +8,15 @@ per-point representation.
 The occurrences of all motifs together form a library of "normal" shapes.
 Each sliding window is compared against that library under z-normalised
 Euclidean distance: a window that looks like some occurrence scores low, one
-that looks like none scores high. Z-normalisation makes the comparison
-shape-only, so amplitude or level anomalies with an ordinary shape are not
-caught by this representation.
+that looks like none scores high.
+
+`norm` controls what "looks like" means, one knob from shape-only to raw:
+
+* ``"shape"``   z-normalised windows: shape only. Amplitude or level anomalies
+  with an ordinary shape are invisible (see 004_NAB in PROJECT.md).
+* ``"centred"`` mean removed, scale kept: shape + amplitude, tolerant to a
+  drifting baseline.
+* ``"raw"``     no normalisation: shape + amplitude + level.
 """
 
 from __future__ import annotations
@@ -38,6 +44,16 @@ def _znorm(windows: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     return (windows - mean) / np.maximum(std, eps)
 
 
+def _normalise(windows: np.ndarray, norm: str) -> np.ndarray:
+    if norm == "shape":
+        return _znorm(windows)
+    if norm == "centred":
+        return windows - windows.mean(axis=1, keepdims=True)
+    if norm == "raw":
+        return windows
+    raise ValueError(f"unknown norm {norm!r}")
+
+
 def _resample(segment: np.ndarray, wlen: int) -> np.ndarray:
     """Linearly resample a segment to exactly `wlen` points.
 
@@ -51,8 +67,8 @@ def _resample(segment: np.ndarray, wlen: int) -> np.ndarray:
     return np.interp(dst, src, segment)
 
 
-def motif_references(signal: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, int]:
-    """The library: z-normalised, length-aligned motif occurrences.
+def motif_references(signal: np.ndarray, mask: np.ndarray, norm: str = "shape") -> tuple[np.ndarray, int]:
+    """The library: normalised, length-aligned motif occurrences.
 
     The common length is the median occurrence length. Returns
     (references of shape (n_occurrences, wlen), wlen).
@@ -63,50 +79,135 @@ def motif_references(signal: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, 
     wlen = int(np.median([end - start + 1 for _, start, end in segments]))
     wlen = max(4, min(wlen, len(signal)))
     stacked = np.vstack([_resample(signal[start : end + 1], wlen) for _, start, end in segments])
-    return _znorm(stacked), wlen
+    return _normalise(stacked, norm), wlen
 
 
-def distance_to_nearest_motif(signal: np.ndarray, mask: np.ndarray) -> np.ndarray:
+def distance_to_nearest_motif(
+    signal: np.ndarray, mask: np.ndarray, norm: str = "shape",
+    point: str = "min", exclude_self: bool = False,
+) -> np.ndarray:
     """Per-point distance to the nearest discovered motif occurrence.
 
-    Each length-`wlen` window is z-normalised and matched against every
-    occurrence in the library; the window keeps its smallest distance. Each
-    point then takes the minimum over the windows covering it, so a point is
-    only called far-from-motif when *no* window containing it matches anything.
+    Each length-`wlen` window is normalised (see module docstring) and matched
+    against every occurrence in the library; the window keeps its smallest
+    distance. Window distances then become per-point scores via `point`:
 
-    Boundary correction: an interior point is covered by `wlen` windows, but
-    point i < wlen-1 is covered by only i+1 of them, so its minimum is taken
-    over fewer candidates and is biased upward — and a series or segment almost
-    always starts and ends mid-pattern, which inflates those windows further.
-    Uncorrected, the boundary dominates the score range and captures any global
-    threshold, so those under-covered points are filled with the median of the
-    fully covered interior.
+    * ``"min"``    each point takes the minimum over the windows covering it
+      (a point is far only when *no* window containing it matches). Smears:
+      a short anomaly always shares some mostly-normal window, so it is hidden.
+    * ``"centre"`` each point takes the distance of the window centred on it,
+      as TSB-AD's MatrixProfile does.
+    * ``"max"``    each point takes the maximum over the windows covering it
+      (a point is far when *any* window containing it is far).
+
+    `exclude_self` ignores library entries that overlap the window being
+    scored. Without it, a window lying on an occurrence matches itself at
+    distance ~0, so the score mostly says "not inside an occurrence" — true of
+    random occurrences too. MatrixProfile's exclusion zone does the same job.
+
+    Boundary correction: points near the ends are covered by fewer windows (or
+    have no centred window), and a series or segment almost always starts and
+    ends mid-pattern. Uncorrected, the boundary dominates the score range, so
+    those points are filled with the median of the interior.
     """
     signal = np.asarray(signal, dtype=np.float64)
-    references, wlen = motif_references(signal, mask)
+    references, wlen = motif_references(signal, mask, norm)
 
-    windows = _znorm(np.lib.stride_tricks.sliding_window_view(signal, wlen))
-    window_distance = cdist(windows, references, metric="euclidean").min(axis=1)
+    windows = _normalise(np.lib.stride_tricks.sliding_window_view(signal, wlen), norm)
+    distance = cdist(windows, references, metric="euclidean")
+    if exclude_self:
+        occ = np.array([(s, e) for _, s, e in occurrences_from_mask(mask)])
+        t = np.arange(len(windows))[:, None]
+        distance[(occ[:, 0] <= t + wlen - 1) & (occ[:, 1] >= t)] = np.inf
+        # a window overlapping every occurrence has nothing left to match
+        distance[np.isinf(distance).all(axis=1)] = np.max(distance[np.isfinite(distance)], initial=0.0)
+    window_distance = distance.min(axis=1)
 
-    return _fill_edges(_min_over_covering_windows(window_distance, len(signal), wlen), wlen)
+    n = len(signal)
+    return window_to_points(window_distance, n, wlen, point)
 
 
-def _min_over_covering_windows(window_distance: np.ndarray, n: int, wlen: int) -> np.ndarray:
-    """Point i takes the minimum distance over every window that contains it."""
-    out = np.full(n, np.inf)
+def _over_covering_windows(window_distance: np.ndarray, n: int, wlen: int, reduce) -> np.ndarray:
+    """Point i takes `reduce` (np.minimum / np.maximum) over every window that contains it."""
+    out = np.full(n, np.inf if reduce is np.minimum else -np.inf)
     for offset in range(wlen):
         chunk = slice(offset, offset + len(window_distance))
-        out[chunk] = np.minimum(out[chunk], window_distance)
+        out[chunk] = reduce(out[chunk], window_distance)
     return out
 
 
-def _fill_edges(distance: np.ndarray, wlen: int) -> np.ndarray:
-    """Replace the under-covered boundary points with the interior median."""
-    margin = wlen - 1
+def _fill_edges(distance: np.ndarray, margin: int) -> np.ndarray:
+    """Replace the first and last `margin` points with the interior median."""
     if margin <= 0 or 2 * margin >= len(distance):
         return distance
     out = distance.copy()
-    interior = out[margin : len(out) - margin]
-    out[:margin] = np.median(interior)
-    out[len(out) - margin :] = np.median(interior)
+    interior = np.median(out[margin : len(out) - margin])
+    out[:margin] = interior
+    out[len(out) - margin :] = interior
     return out
+
+
+def uncovered_fraction(signal: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """RQ1 occurrence-based variant: how little of each point's neighbourhood motifs cover.
+
+    A motif is by definition something that repeats and an anomaly by
+    definition does not, so anomalies should fall outside motif occurrences.
+    Point i scores the fraction of the `wlen`-point window centred on it that no
+    occurrence covers (`wlen` as in `motif_references`). Uses only *where* the
+    motifs are, so random occurrences carry no information here.
+    """
+    occurrences = occurrences_from_mask(mask)
+    if not occurrences:
+        raise ValueError("mask contains no motif occurrences")
+    wlen = int(np.median([end - start + 1 for _, start, end in occurrences]))
+    covered = (np.atleast_2d(mask) > 0).any(axis=0).astype(np.float64)
+    return 1.0 - np.convolve(covered, np.ones(wlen) / wlen, mode="same")
+
+
+def motif_features(signal: np.ndarray, occurrences: list, norm: str = "centred", chunk: int = 20000):
+    """RQ1 per-motif variant: every window's distance to each motif separately.
+
+    `occurrences` are (motif_id, start, end) in `signal` coordinates. Column k of
+    the result is the window's distance to its nearest occurrence of motif k
+    (like KMeansAD's distance to each of its centres), with self-matches
+    excluded as in `distance_to_nearest_motif`. Returns
+    (features of shape (n_windows, n_motifs), wlen). Chunked so a 650k-point
+    series fits in memory.
+    """
+    signal = np.asarray(signal, dtype=np.float64)
+    occurrences = sorted(occurrences)
+    if not occurrences:
+        raise ValueError("no motif occurrences")
+    ids = np.array([m for m, _, _ in occurrences])
+    starts = np.array([s for _, s, _ in occurrences])
+    ends = np.array([e for _, _, e in occurrences])
+    wlen = max(4, min(int(np.median(ends - starts + 1)), len(signal)))
+    refs = _normalise(np.vstack([_resample(signal[s : e + 1], wlen) for s, e in zip(starts, ends)]), norm)
+    first_of_motif = np.flatnonzero(np.r_[True, ids[1:] != ids[:-1]])
+
+    all_windows = np.lib.stride_tricks.sliding_window_view(signal, wlen)
+    out = np.empty((len(all_windows), len(first_of_motif)))
+    for c in range(0, len(all_windows), chunk):
+        distance = cdist(_normalise(all_windows[c : c + chunk], norm), refs)
+        t = np.arange(c, c + len(distance))[:, None]
+        distance[(starts <= t + wlen - 1) & (ends >= t)] = np.inf
+        out[c : c + len(distance)] = np.minimum.reduceat(distance, first_of_motif, axis=1)
+    # a window overlapping every occurrence of a motif has nothing left to match
+    finite = np.where(np.isfinite(out), out, -np.inf).max(axis=0)
+    return np.where(np.isfinite(out), out, np.maximum(finite, 0.0)), wlen
+
+
+def window_to_points(window_score: np.ndarray, n: int, wlen: int, point: str = "centre") -> np.ndarray:
+    """Window scores -> point scores; `point` as in `distance_to_nearest_motif`.
+
+    Under-covered edge points are filled with the interior median.
+    """
+    if point in ("min", "max"):
+        reduce = np.minimum if point == "min" else np.maximum
+        return _fill_edges(_over_covering_windows(window_score, n, wlen, reduce), wlen - 1)
+    if point == "centre":
+        half = wlen // 2
+        out = np.full(n, np.median(window_score))
+        out[half : half + len(window_score)] = window_score
+        return _fill_edges(out, half)
+    raise ValueError(f"unknown point {point!r}")
