@@ -5,7 +5,10 @@ our side. Scores go through the same `minmax` + `evaluate` as the motif
 pipeline, with the same period as `slidingWindow`, so rows are directly
 comparable with results/tuning_metrics.csv.
 
-    .venv/bin/python notebooks/02_baselines.py [--detectors MatrixProfile,SAND] [--files a.csv,b.csv]
+    .venv/bin/python notebooks/02_baselines.py [--detectors MatrixProfile,SAND] [--files a.csv,b.csv] [--split eval]
+
+`--split eval` runs the 350 Eval series into results/baseline_eval_metrics.csv,
+used to check our pipeline against TSB-AD's published per-series VUS-PR.
 """
 
 from __future__ import annotations
@@ -51,13 +54,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--detectors", default=",".join(DETECTORS))
     parser.add_argument("--files", default=None, help="comma-separated subset")
+    parser.add_argument("--split", default="tuning", choices=["tuning", "eval"])
     args = parser.parse_args()
+    file_list = tuning.FILE_LIST if args.split == "tuning" else tuning.FILE_LIST.with_name("TSB-AD-U-Eva.csv")
+    out_csv = OUT_CSV if args.split == "tuning" else OUT_CSV.with_name("baseline_eval_metrics.csv")
 
     from TSB_AD.utils.slidingWindows import find_length_rank
 
     wanted = [d.strip() for d in args.detectors.split(",") if d.strip()]
-    files = args.files.split(",") if args.files else pd.read_csv(tuning.FILE_LIST)["file_name"].tolist()
-    already = tuning.done_keys(OUT_CSV)
+    files = args.files.split(",") if args.files else pd.read_csv(file_list)["file_name"].tolist()
+    already = tuning.done_keys(out_csv)
 
     for i, filename in enumerate(files, 1):
         if not (DATA_DIR / filename).exists():
@@ -88,7 +94,7 @@ def main():
                 print(f"    {name:<16} FAILED {row['status']}", end="", flush=True)
             row["seconds"] = round(time.perf_counter() - start, 1)
             print(f"  ({row['seconds']}s)", flush=True)
-            tuning.append_row(OUT_CSV, row)
+            tuning.append_row(out_csv, row)
 
 
 if __name__ == "__main__":

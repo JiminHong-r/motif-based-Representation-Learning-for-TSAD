@@ -12,6 +12,8 @@ training data. Protocol, fixed for every series:
   the training windows (0-1 scale);
 * scorers: "nearest" = smallest per-motif distance; "iforest" = sklearn
   IsolationForest with default settings fitted on the training windows;
+  "weighted" = NormA-style weighted average of the per-motif distances, each
+  motif weighted by its share of all occurrences (Louis, 2026-09-30);
   window scores go to points via the centred window, or with --point max via
   the maximum over covering windows (labelled "-max");
 * the whole series is scored and evaluated, as TSB-AD does for its
@@ -49,7 +51,7 @@ tuning = importlib.import_module("01_tuning_set")
 
 OUT_CSV = ROOT / "results" / "trained_metrics.csv"
 MASK_DIR = ROOT / "results" / "masks_train"
-SCORERS = ["nearest", "iforest"]
+SCORERS = ["nearest", "iforest", "weighted"]
 
 
 def train_end(filename: str, period: int) -> int:
@@ -64,8 +66,10 @@ def scores(values: np.ndarray, occurrences: list, n_train: int, point: str = "ce
     train_rows = features[: max(1, n_train - wlen + 1)]
     features = features / np.maximum(train_rows.max(axis=0), 1e-12)
     train_rows = features[: len(train_rows)]
+    ids, counts = np.unique([m for m, _, _ in occurrences], return_counts=True)  # same order as columns
     window = {
         "nearest": features.min(axis=1),
+        "weighted": features @ (counts / counts.sum()),
         "iforest": -IsolationForest(random_state=0).fit(train_rows).score_samples(features),
     }
     return {k: minmax(window_to_points(v, len(values), wlen, point)) for k, v in window.items()}
@@ -100,7 +104,8 @@ def main():
         for backend in args.backends.split(","):
             label = backend + tag
             for variant, shuffle in ((label, False), (f"{label}+random", True)):
-                if (filename, variant, f"train-nearest{suffix}") in done:
+                todo = [sc for sc in SCORERS if (filename, variant, f"train-{sc}{suffix}") not in done]
+                if not todo:
                     continue
                 base = {"file": filename, "backend": variant, "n": n, "period": period, "train": n_train,
                         "anomaly_ratio": float(series.labels.mean())}
@@ -113,6 +118,8 @@ def main():
                     occ = pooled_occurrences(segments, (lambda m: shuffle_mask(m, rng)) if shuffle else None)
                     rows = []
                     for scorer, score in scores(series.values, occ, n_train, args.point).items():
+                        if scorer not in todo:
+                            continue
                         metrics = evaluate(score, series.labels, period)
                         rows.append({**base, "representation": f"train-{scorer}{suffix}", "status": "ok",
                                      **{k: metrics.get(k, float("nan")) for k in tuning.KEEP}})
@@ -120,7 +127,7 @@ def main():
                 except Exception as exc:  # keep going; record the failure
                     status = f"{type(exc).__name__}: {str(exc)[:120]}"
                     rows = [{**base, "representation": f"train-{s}{suffix}", "status": status,
-                             **{k: float("nan") for k in tuning.KEEP}} for s in SCORERS]
+                             **{k: float("nan") for k in tuning.KEEP}} for s in todo]
                     print(f"    {variant:<20} FAILED {status}", flush=True)
                 seconds = round(time.perf_counter() - start, 1)
                 for row in rows:

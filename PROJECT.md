@@ -46,6 +46,9 @@ Supervisor guidance: realistic VUS-PR is around 0.4–0.5; **don't overfit, don'
 - A **random-motif floor** (same number and lengths of occurrences, random positions) is computed on **every** series. VUS-PR's chance level is not 0 and varies per series, so results are only read relative to the floor on the same series.
 - Reference numbers (TSB-AD paper, 32 detectors, Eva split): best **Sub-PCA 0.423**, MatrixProfile 0.350, IForest 0.298. Newer leaderboard entries reach 0.586 (TimeRCD_MAFT). Published **per-series** VUS-PR for all 32 detectors exists for Eva only (`benchmark_exp/benchmark_eval_results/uni_mergedTable_VUS-PR.csv`), so the final Eval comparison does not require rerunning them — but the Tuning split does.
 
+**Frozen configuration (2026-10-01, chosen on Tuning by the §5 Step 2 rule — do not change after Eval):**
+LoCoMotif with `rho=0.6` (other settings default), motifs discovered on the training part (`tr_` prefix, at least 4 × min motif length), 8000-point segments, motif length period–2×period; per-motif distance with mean-centring and self-match exclusion; score = distance to the nearest motif; window → point by max over covering windows; min-max. Random-motif floor with seed 2024. `notebooks/05_trained.py --backends LoCoMotif --params rho=0.6 --point max`, representation `train-nearest-max`. Tuning: 0.378 mean (median 0.315), random 0.312, 30/48 wins.
+
 ## 5. What to do now — plan after the Tuning results (2026-10-01)
 
 Supervisor goal (meeting 2026-09-29, Louis's email 2026-09-30): see how far *existing* motif methods can go — changing their hyperparameters is allowed, new methods are not the point; rank against all TSB-AD detectors (ideal 1st, good top 5–10); compare with methods that build a reference bank of normal subsequences (KShapeAD, KMeansAD, NormA, PBAD). Don't overfit.
@@ -88,6 +91,11 @@ About 30 variants have now been tried on Tuning, so the best Tuning number is op
 - **Occurrence-based "uncovered":** weak alone (0.14) but beats random on 39/48 — anomalies fall outside motif occurrences, which random positions cannot reproduce. Fused with the distance score it beats random 31/48 but lowers the mean (0.30).
 - **Per anomaly type (Tuning):** non-periodic series (period < 16, mostly server/web metrics with spikes and level shifts: SMD, WSD, MSL) — motifs 0.58–0.61 vs. KShapeAD 0.10, MatrixProfile 0.18, Sub-PCA 0.45. Periodic series (ECG, synthetic: UCR, YAHOO, LTDB, TODS) — motifs 0.30–0.32 vs. KShapeAD 0.46. Point anomalies (length ≤ 3): KShapeAD 0.51 vs. motifs 0.35–0.39.
 
+- **Last round (§5 Step 1), both negative, as decided in advance:**
+  - *Periodic weakness:* not flat windows (they explain the top scores on 2/29 periodic series). Cause: a small bank holds each motif at one phase, so normal windows at other phases look far and the score oscillates with the period; resampling occurrences of different lengths (13–79 points on YAHOO_93) to one length also distorts their frequency. Min-aggregation hid this, which is why shape/min worked on periodic series. A phase-complete, unresampled bank did not help the frozen configuration (0.418 vs. 0.430 on the 12 short periodic series). Recorded as a limitation.
+  - *Weighted bank (NormA-style weighted average, weights = occurrence share):* 0.372 vs. 0.378 for nearest, better on only 12/48.
+- **Our VUS-PR vs. TSB-AD's published numbers (10 Eval series):** MatrixProfile identical on 8/10, Sub-PCA within 0.003. The other 2 (151_Stock_3, 277_NEK_1) reproduce exactly when the window is 125: in TSB-AD's run `find_length_rank` fell back to 125 there, in our environment it returns 5 and 4 (likely a statsmodels version difference; TSB-AD does not pin it). MatrixProfile on all 350 Eval series is running to list every such series before the leaderboard comparison.
+
 ## 7. Phase plan
 
 | Phase | Focus | Status |
@@ -96,7 +104,7 @@ About 30 variants have now been tried on Tuning, so the best Tuning number is op
 | 1 — Thin vertical slice | k-Motiflets + LoCoMotif, one representation, VUS-PR | Done, on the full Tuning split |
 | 2 — Representation layer (RQ1) | distance (shape/centred/raw), per-motif features, occurrence-based | Done on Tuning |
 | 3 — Scoring strategies (RQ2) | nearest vs. IsolationForest; min/centre/max aggregation | Done on Tuning |
-| 3b — Last round | periodic weakness, weighted bank | Next (§5 Step 1), 1 week |
+| 3b — Last round | periodic weakness, weighted bank | Done, both negative; configuration frozen |
 | 4 — Eval + baselines | frozen config on 350 Eval series; NormA, PBAD | After freeze |
 | 4b — Propagation study (RQ3) | more `tsmd` backends under the frozen config | After Eval |
 | 5 — Write-up | method + setup now, results after Eval | Started |
