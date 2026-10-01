@@ -1,6 +1,6 @@
 # Motif-Based Representation Learning for Time Series Anomaly Detection
 
-**Status as of 2026-09-24:** Phase 1 done. LoCoMotif + random floor finished on all 48 Tuning series: **no better than random** (VUS-PR 0.260 vs. 0.258, 24/48 wins). k-Motiflets run and baseline detectors on the same 48 series in progress (§5).
+**Status as of 2026-10-01:** Phases 1–3 done on the 48 Tuning series. Best candidate — LoCoMotif (`rho=0.6`), motifs from the training part, nearest-motif distance, max aggregation — VUS-PR **0.378** vs. random floor 0.312 (30/48 wins), above all five baselines that ran here (KShapeAD 0.369, MatrixProfile 0.328, KMeansAD 0.327, Sub-PCA 0.326). Next: one bounded last round, freeze, then Eval once (§5).
 
 ## 1. Goal
 
@@ -46,16 +46,29 @@ Supervisor guidance: realistic VUS-PR is around 0.4–0.5; **don't overfit, don'
 - A **random-motif floor** (same number and lengths of occurrences, random positions) is computed on **every** series. VUS-PR's chance level is not 0 and varies per series, so results are only read relative to the floor on the same series.
 - Reference numbers (TSB-AD paper, 32 detectors, Eva split): best **Sub-PCA 0.423**, MatrixProfile 0.350, IForest 0.298. Newer leaderboard entries reach 0.586 (TimeRCD_MAFT). Published **per-series** VUS-PR for all 32 detectors exists for Eva only (`benchmark_exp/benchmark_eval_results/uni_mergedTable_VUS-PR.csv`), so the final Eval comparison does not require rerunning them — but the Tuning split does.
 
-## 5. What to do now — after supervisor meeting 2026-09-29
+## 5. What to do now — plan after the Tuning results (2026-10-01)
 
-**Goal reset:** see how far *existing* motif methods can go for anomaly detection — no new methods. Success is a ranking against all TSB-AD detectors on VUS-PR (ideal 1st, good top 5–10), shown as one plot of every method with ours highlighted. Still: don't overfit, don't over-optimise.
+Supervisor goal (meeting 2026-09-29, Louis's email 2026-09-30): see how far *existing* motif methods can go — changing their hyperparameters is allowed, new methods are not the point; rank against all TSB-AD detectors (ideal 1st, good top 5–10); compare with methods that build a reference bank of normal subsequences (KShapeAD, KMeansAD, NormA, PBAD). Don't overfit.
 
-1. **Per-motif distance features.** Each window → its distance to each discovered motif (≈10 motifs → 10 numbers), scaled to 0–1. Same shape as KMeansAD (distance to 10 centres), which scores high. Compare "nearest" (what we have now) with a detector on the feature vector.
-2. **Embedding + classifier.** Use that feature vector as an embedding; fit a detector/classifier on it, possibly weakly/semi-supervised on the training prefix.
-3. **Motif hyperparameters.** Sensitivity to the discovery settings, e.g. k-Motiflets `k_max`, LoCoMotif number of motifs. Report as sensitivity, pick one setting on Tuning.
-4. **Look into the data.** Which series / anomaly types work and which don't (TSB-AD tables carry `point_anomaly` / `seq_anomaly`, anomaly length, ratio); for the failing types, why, and what would fix them.
-5. **Leaderboard notebook.** Published per-series VUS-PR for 32 detectors on Eval (`benchmark_exp/benchmark_eval_results/uni_mergedTable_VUS-PR.csv`) plus newer ones (`benchmark_exp/leaderboard_results/`). Plot all methods, highlight ours.
-6. **Train/test split** — must be justified. Currently the method is unsupervised on the whole series (no split). TSB-AD's filename `tr_<end>` marks a training prefix: 5–47% of the series (median 25%), but on 7/48 Tuning series the first anomaly lies *inside* it, so it is not guaranteed anomaly-free.
+About 30 variants have now been tried on Tuning, so the best Tuning number is optimistic. The plan is one bounded last round, then freeze, then Eval once.
+
+**Step 1 — last round on Tuning (time-box: 1 week, decided before running).** Only two items, each motivated by the supervisor or by a diagnosed weakness:
+- *Periodic-series weakness.* Motifs score 0.30 on periodic series vs. KShapeAD 0.46, but 0.58–0.61 on non-periodic ones vs. 0.10. Shape-only (z-norm) collapses from 0.31 with min-aggregation to 0.13 with centre-aggregation on periodic series — diagnose why (suspect: z-normalising near-flat windows amplifies noise, which MatrixProfile/stumpy guards against). If it is a defect, fix it; if not, record it as a limitation. No per-series switching between variants.
+- *Weighted reference bank* (Louis: integrate components of other methods; NormA weights its normal model). One fixed formula: weight each motif by its number of occurrences. One run.
+
+**Step 2 — freeze.** Pick the configuration by mean VUS-PR over all 48 series, with no failures and a positive gap to its random floor. Current choice: LoCoMotif `rho=0.6`, training part, nearest, max (§6). Write the frozen configuration into §4 before Step 3.
+
+**Step 3 — check our evaluation against TSB-AD's.** Run MatrixProfile through our `evaluate` on ~10 Eval series and compare with the published per-series VUS-PR. If they match, the leaderboard comparison is valid.
+
+**Step 4 — Eval once (350 series).** Frozen configuration plus its random floor. Motif discovery on the training part only. Estimate several days on the laptop (lid open, plugged in); a university machine would help. Then `06_leaderboard.py --ours` and the per-type analysis on Eval (the published table carries point/sequence-anomaly metadata).
+
+**Step 5 — reference-bank baselines (in parallel with Step 4).** NormA: email Boniol/Palpanas for the TSB-AD ZIP password. PBAD (Feremans et al. 2019): find the authors' code and run it on Eval. KShapeAD/KMeansAD: published Eval numbers already exist.
+
+**Step 6 — RQ3 depth.** Same frozen configuration with more `tsmd` backends (SetFinder, STOMP, PanMP; maybe LAMA) for a spread of motif quality, each with its random floor. Main question: does the gap to random grow with the backend? Plus the occurrence-based finding (motifs beat random on 39/48 there).
+
+**Step 7 — writing, starting now.** Method (reference-bank framing from Louis's email) and experimental setup (splits, window rule, random floor, metric) are stable and can be written.
+
+**Train/test split (for the write-up):** motifs are learned on TSB-AD's `tr_<end>` prefix (5–47% of a series, median 25%), extended to at least 4 × the minimum motif length (2 Tuning series). The whole series is scored, as TSB-AD does for its semi-supervised detectors. Caveat: on 7/48 Tuning series the first anomaly lies inside the prefix, so it is not guaranteed anomaly-free.
 
 ## 6. Findings so far
 
@@ -66,36 +79,51 @@ Supervisor guidance: realistic VUS-PR is around 0.4–0.5; **don't overfit, don'
 - **Tuning run, LoCoMotif, complete (48/48, 0 failures):** mean VUS-PR **0.260 vs. random floor 0.258** (medians 0.096 vs. 0.093); beats random on exactly **24/48**, median paired difference 0.000. Mean AUC-ROC 0.641 vs. 0.571 — the only metric with a gap. Per source: clear wins on periodic ECG/synthetic (TODS 0.76 vs. 0.44, SVDB 0.33 vs. 0.19, LTDB 0.39 vs. 0.27); clear losses on UCR (0.17 vs. 0.30), OPPORTUNITY (0.14 vs. 0.24), NAB (0.15 vs. 0.17) — consistent with the z-normalisation and period-estimate findings above. First evidence for "decoupled", one backend only; ~115 s per series.
 - **Scaling:** k-Motiflets 17.8 s → 37.8 s → 91.9 s → 364 s at n = 2K/4K/8K/16K (superlinear); LoCoMotif 2.7 s → 64 s over the same range.
 
+- **Baselines on the 48 Tuning series** (TSB-AD hyperparameters, our `evaluate`): KShapeAD 0.369, MatrixProfile 0.328, KMeansAD 0.327, Sub-PCA 0.326, SAND 0.152 (crashes on 24/48). NormA and Series2Graph are patent-protected and need a password from the authors.
+- **Three design flaws in the first representation** (found by diagnosing where MatrixProfile wins): (1) self-matches — windows on an occurrence matched themselves at distance ~0, so the score mostly said "not inside an occurrence", which random occurrences do too; (2) min over covering windows hid short anomalies; (3) z-normalisation hid amplitude anomalies. Fixes: exclude overlapping library entries, centre/max aggregation, mean-centring instead of z-norm.
+- **Ablation, whole series, LoCoMotif:** shape/min 0.260 → shape/centre 0.111 → +excl 0.105 → centred 0.355 → centred/max 0.387. The random floor follows every step (0.399 at the end): in the whole-series setting the gain comes from how windows are compared, not from the motifs.
+- **Training part + per-motif features:** nearest 0.323 vs. random 0.295; with max 0.381 vs. 0.323. IsolationForest on the per-motif features is worse (0.29). LoCoMotif finds no motifs in 3 short training parts; `rho=0.6` fixes that (0.378, 48/48, 30/48 wins vs. random).
+- **Hyperparameters:** k-Motiflets `k_max=20` worse (0.281 vs. 0.299). k-Motiflets returns a single motif per series, and on some series near-duplicate occurrences (starts 3420…3428 on SMD_16) — its library can be 2–3 distinct windows.
+- **Max aggregation** (Louis) helps in every setting: +0.03 to +0.06.
+- **Occurrence-based "uncovered":** weak alone (0.14) but beats random on 39/48 — anomalies fall outside motif occurrences, which random positions cannot reproduce. Fused with the distance score it beats random 31/48 but lowers the mean (0.30).
+- **Per anomaly type (Tuning):** non-periodic series (period < 16, mostly server/web metrics with spikes and level shifts: SMD, WSD, MSL) — motifs 0.58–0.61 vs. KShapeAD 0.10, MatrixProfile 0.18, Sub-PCA 0.45. Periodic series (ECG, synthetic: UCR, YAHOO, LTDB, TODS) — motifs 0.30–0.32 vs. KShapeAD 0.46. Point anomalies (length ≤ 3): KShapeAD 0.51 vs. motifs 0.35–0.39.
+
 ## 7. Phase plan
 
-| Phase | Focus | Status / notes | Est. duration |
-|---|---|---|---|
-| 0 — Framing | Lock in benchmark framing, univariate scope, toy dataset | Done | 1 week |
-| 1 — Thin vertical slice | k-Motiflets + LoCoMotif via `tsmd`, one representation, one scorer, VUS-PR sanity check | **Done.** Extended to the full Tuning split. | 2–3 weeks |
-| 2 — Representation layer (RQ1) | 3 representation variants (distance/occurrence/reconstruction-error) | Next after baselines. Start with an **amplitude-aware** variant (motivated by the z-normalisation finding), and consider scoring per motif rather than pooling all occurrences into one library. `tsmd` supplies the backend interface; LAMA needs one adapter. | 2–3 weeks |
-| 3 — Scoring strategies (RQ2) | Rule-based vs. lightweight detector (kNN/IForest on the representation) | Run on the 48-series Tuning split (was: 5–10 series). | 3–4 weeks |
-| 4 — Propagation study (RQ3) | Quality vs. performance across backends | Use the `tsmd` methods' spread of sophistication (cheap first: SetFinder, STOMP, PanMP) plus the random-motif floor on every series, and compare against MatrixProfile (no motif selection) and the normal-pattern-library detectors. Quality is inferred entirely from downstream VUS-PR. | 4 weeks |
-| 5 — Final evaluation + write-up | Eval split once, frozen; full draft | Compare against published per-series Eval numbers. | 3–4 weeks |
+| Phase | Focus | Status |
+|---|---|---|
+| 0 — Framing | Benchmark framing, univariate scope | Done |
+| 1 — Thin vertical slice | k-Motiflets + LoCoMotif, one representation, VUS-PR | Done, on the full Tuning split |
+| 2 — Representation layer (RQ1) | distance (shape/centred/raw), per-motif features, occurrence-based | Done on Tuning |
+| 3 — Scoring strategies (RQ2) | nearest vs. IsolationForest; min/centre/max aggregation | Done on Tuning |
+| 3b — Last round | periodic weakness, weighted bank | Next (§5 Step 1), 1 week |
+| 4 — Eval + baselines | frozen config on 350 Eval series; NormA, PBAD | After freeze |
+| 4b — Propagation study (RQ3) | more `tsmd` backends under the frozen config | After Eval |
+| 5 — Write-up | method + setup now, results after Eval | Started |
 
 ## 8. Open decisions to raise with the supervisor
 
-- **RQ3 design (settled)**: motif discovery quality is treated as a latent variable, operationalized only through its effect on downstream VUS-PR — no PROM/TSMD-Bench validation step. Quality varies via (a) the natural spread across `tsmd`'s methods, and (b) a random-motif baseline as the floor.
-- **Framing consequence**: since quality is never measured directly, the thesis's claims about "quality" are strictly claims about *downstream-performance-inferred* quality. Worth stating explicitly in the write-up as a scoping choice, not an oversight.
-- **Scope to periodic series?** If motifs only help on periodic data, that is a legitimate, stated boundary.
-- **Unsupervised vs. semi-supervised**: learn motifs from the anomaly-free `tr_` prefix only (TSB-AD's semi-supervised category)? Cleaner conceptually and much cheaper.
-- **Positioning against NORMA** and the other normal-pattern-library detectors (KShapeAD, KMeansAD, Series2Graph, SAND): the thesis's angle is "motif discovery as a way of building the normal library".
-- **Whether to include LAMA and/or SubTSMD** as extra backends beyond `tsmd`, given the adapter work each requires.
+- **Periodic vs. non-periodic.** Motifs win clearly on non-periodic series and lose on periodic ones (§6). Accept as a stated boundary, or worth investigating further (§5 Step 1)?
+- **Training part vs. whole series.** Whole series scores slightly higher (0.387) but random banks match it; training part (0.378) is where motifs beat random. Proposal: training part, because it is the setting where the motif step actually contributes.
+- **Compute for Eval.** 350 series of motif discovery takes days on a laptop — is a university machine available?
+- **PBAD code** — does Louis know of a maintained implementation?
+- Settled: RQ3 quality is inferred from downstream VUS-PR only; changing hyperparameters of existing methods is allowed; the `tr_` prefix may be used as training data.
 
 ## 9. Code layout
 
 ```
-notebooks/01_tuning_set.py   run the pipeline over the 48 Tuning series → results/tuning_metrics.csv
-src/data.py                  load a TSB-AD-U CSV (values + labels)
-src/pipeline.py              window rule, overlapping segments, per-segment motif fit, random-motif floor
-src/representation.py        mask → library of z-normalised occurrences → per-point distance to nearest
-src/scoring.py               min-max normalisation, TSB-AD get_metrics wrapper
-external/TSMD, external/TSB-AD   pinned submodules (not our code)
-data/                        TSB-AD-U (gitignored)
+notebooks/01_tuning_set.py      first pipeline, whole series → results/tuning_metrics.csv
+notebooks/02_baselines.py       TSB-AD baselines → results/baseline_metrics.csv
+notebooks/03_compare.py         tables for 01 + 02
+notebooks/04_representations.py whole-series ablation over cached motifs → results/representation_metrics.csv
+notebooks/05_trained.py         motifs from the training part, per-motif features, --params, --point → results/trained_metrics.csv
+notebooks/06_leaderboard.py     published TSB-AD-U Eval VUS-PR, ours highlighted → results/leaderboard.png
+src/data.py                     load a TSB-AD-U CSV (values + labels)
+src/pipeline.py                 window rule, segments, cached motif discovery, random-motif floor
+src/representation.py           reference bank, distances (norm / aggregation / self-exclusion), per-motif features, occurrence score
+src/scoring.py                  min-max normalisation, TSB-AD get_metrics wrapper
+external/TSMD, external/TSB-AD  pinned submodules (not our code)
+data/, results/                 gitignored
 ```
 
 ## 10. Key references
@@ -103,4 +131,5 @@ data/                        TSB-AD-U (gitignored)
 - TSAD foundations: Schmidl et al. (VLDB 2022); Liu & Paparrizos, *TSB-AD* (NeurIPS 2024); Boniol et al., decade review (2024)
 - TSMD backends: Motiflets (Schäfer & Leser, VLDB 2022); LoCoMotif (Van Wesenbeeck et al., DMKD 2024); LAMA/leitmotifs (Schäfer & Leser, VLDB 2025); Guerrini et al., *TSMD: A Comprehensive Evaluation* (VLDB 2025) — source of the `tsmd` package
 - Normal-pattern-library detectors (baselines): NORMA, SAND, Series2Graph, KShapeAD — see TSB-AD's model list for the original papers
+- Reference-bank baselines from Louis (2026-09-30): NormA (Boniol et al., VLDB J 2021, doi:10.1007/s00778-021-00655-8); PBAD (Feremans et al., ECML PKDD 2019, doi:10.1007/978-3-030-46150-8_15)
 - Pending: SubTSMD (Carpentier et al., DMKD 2026) — no public repo yet, KU Leuven contact in progress.
