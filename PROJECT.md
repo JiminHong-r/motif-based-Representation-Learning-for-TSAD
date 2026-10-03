@@ -51,6 +51,8 @@ LoCoMotif with `rho=0.6` (other settings default), motifs discovered on the trai
 
 **Eval run started 2026-10-03** at commit `6baf029` (decision: training part, not whole series — it is the setting where motif discovery beats a random bank). Output `results/eval_metrics.csv`, log `results/eval_full.log`. Then `06_leaderboard.py --ours results/eval_metrics.csv`, on all 350 series and on the 326 in `results/eval_period_check.csv`.
 
+**Failure rule (fixed 2026-10-03 before any Eval score was read):** at 263/350, LoCoMotif found no motifs in the training part of 17 series (SMAP 8, MSL 6, SMD 6, WSD 4, IOPS 4, …). Headline number counts every failure as VUS-PR 0 — TSB-AD's own benchmark script does the same (`list_w = [0]*9` on exception). Also reported: mean over successful series with the failure count. The configuration is not changed because of Eval failures.
+
 ## 5. What to do now — plan after the Tuning results (2026-10-01)
 
 Supervisor goal (meeting 2026-09-29, Louis's email 2026-09-30): see how far *existing* motif methods can go — changing their hyperparameters is allowed, new methods are not the point; rank against all TSB-AD detectors (ideal 1st, good top 5–10); compare with methods that build a reference bank of normal subsequences (KShapeAD, KMeansAD, NormA, PBAD). Don't overfit.
