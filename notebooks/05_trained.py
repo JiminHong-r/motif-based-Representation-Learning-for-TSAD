@@ -24,6 +24,11 @@ is fair game) go in --params; each setting is its own backend label, e.g.
 "k-Motiflets[k_max=20]", with its own motif cache.
 
     .venv/bin/python notebooks/05_trained.py [--backends LoCoMotif] [--params rho=0.6] [--files a.csv]
+
+`--split eval` runs the 350 Eval series into results/eval_metrics.csv with the
+frozen scorer only (PROJECT.md §4) — run once, never to choose between variants:
+
+    .venv/bin/python notebooks/05_trained.py --split eval --backends LoCoMotif --params rho=0.6 --point max
 """
 
 from __future__ import annotations
@@ -81,7 +86,11 @@ def main():
     parser.add_argument("--files", default=None, help="comma-separated subset")
     parser.add_argument("--params", default="", help="discovery hyperparameters, e.g. k_max=20")
     parser.add_argument("--point", default="centre", help="window->point aggregation: centre or max")
+    parser.add_argument("--split", default="tuning", choices=["tuning", "eval"])
     args = parser.parse_args()
+    file_list = tuning.FILE_LIST if args.split == "tuning" else tuning.FILE_LIST.with_name("TSB-AD-U-Eva.csv")
+    out_csv = OUT_CSV if args.split == "tuning" else OUT_CSV.with_name("eval_metrics.csv")
+    scorers = SCORERS if args.split == "tuning" else ["nearest"]  # the frozen scorer only
     params = {k: float(v) if "." in v else int(v) for k, v in (kv.split("=") for kv in args.params.split(",") if kv)}
     tag = f"[{args.params}]" if params else ""
     suffix = "" if args.point == "centre" else f"-{args.point}"
@@ -89,10 +98,10 @@ def main():
     from TSB_AD.utils.slidingWindows import find_length_rank
 
     factories = tuning.backend_factories()
-    files = args.files.split(",") if args.files else pd.read_csv(tuning.FILE_LIST)["file_name"].tolist()
+    files = args.files.split(",") if args.files else pd.read_csv(file_list)["file_name"].tolist()
     done = set()
-    if OUT_CSV.exists():
-        frame = pd.read_csv(OUT_CSV)
+    if out_csv.exists():
+        frame = pd.read_csv(out_csv)
         done = set(zip(frame["file"], frame["backend"], frame["representation"]))
 
     for i, filename in enumerate(files, 1):
@@ -104,7 +113,7 @@ def main():
         for backend in args.backends.split(","):
             label = backend + tag
             for variant, shuffle in ((label, False), (f"{label}+random", True)):
-                todo = [sc for sc in SCORERS if (filename, variant, f"train-{sc}{suffix}") not in done]
+                todo = [sc for sc in scorers if (filename, variant, f"train-{sc}{suffix}") not in done]
                 if not todo:
                     continue
                 base = {"file": filename, "backend": variant, "n": n, "period": period, "train": n_train,
@@ -131,7 +140,7 @@ def main():
                     print(f"    {variant:<20} FAILED {status}", flush=True)
                 seconds = round(time.perf_counter() - start, 1)
                 for row in rows:
-                    tuning.append_row(OUT_CSV, {**row, "seconds": seconds})
+                    tuning.append_row(out_csv, {**row, "seconds": seconds})
 
 
 if __name__ == "__main__":
