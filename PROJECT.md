@@ -49,6 +49,8 @@ Supervisor guidance: realistic VUS-PR is around 0.4–0.5; **don't overfit, don'
 **Frozen configuration (2026-10-01, chosen on Tuning by the §5 Step 2 rule — do not change after Eval):**
 LoCoMotif with `rho=0.6` (other settings default), motifs discovered on the training part (`tr_` prefix, at least 4 × min motif length), 8000-point segments, motif length period–2×period; per-motif distance with mean-centring and self-match exclusion; score = distance to the nearest motif; window → point by max over covering windows; min-max. Random-motif floor with seed 2024. `notebooks/05_trained.py --backends LoCoMotif --params rho=0.6 --point max`, representation `train-nearest-max`. Tuning: 0.378 mean (median 0.315), random 0.312, 30/48 wins.
 
+**Eval run started 2026-10-03** at commit `6baf029` (decision: training part, not whole series — it is the setting where motif discovery beats a random bank). Output `results/eval_metrics.csv`, log `results/eval_full.log`. Then `06_leaderboard.py --ours results/eval_metrics.csv`, on all 350 series and on the 326 in `results/eval_period_check.csv`.
+
 ## 5. What to do now — plan after the Tuning results (2026-10-01)
 
 Supervisor goal (meeting 2026-09-29, Louis's email 2026-09-30): see how far *existing* motif methods can go — changing their hyperparameters is allowed, new methods are not the point; rank against all TSB-AD detectors (ideal 1st, good top 5–10); compare with methods that build a reference bank of normal subsequences (KShapeAD, KMeansAD, NormA, PBAD). Don't overfit.
