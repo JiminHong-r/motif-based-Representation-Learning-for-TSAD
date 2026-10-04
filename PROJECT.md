@@ -1,6 +1,6 @@
 # Motif-Based Representation Learning for Time Series Anomaly Detection
 
-**Status as of 2026-10-01:** Phases 1–3 done on the 48 Tuning series. Best candidate — LoCoMotif (`rho=0.6`), motifs from the training part, nearest-motif distance, max aggregation — VUS-PR **0.378** vs. random floor 0.312 (30/48 wins), above all five baselines that ran here (KShapeAD 0.369, MatrixProfile 0.328, KMeansAD 0.327, Sub-PCA 0.326). Next: one bounded last round, freeze, then Eval once (§5).
+**Status as of 2026-10-05:** Eval done (frozen configuration, 350 series). VUS-PR **0.333** (failures as 0; 0.350 over the 333 series with motifs) — rank **22 of 42** on the TSB-AD-U leaderboard, between CNN (0.343) and LSTMAD (0.325). Random bank 0.321; motifs beat random on only 164/333 series (median difference 0.000). The Tuning result (0.378, 30/48 vs. random) did not carry over. Next: write-up around the decoupling answer, RQ3 with more backends, NormA/PBAD (§5).
 
 ## 1. Goal
 
@@ -100,6 +100,15 @@ About 30 variants have now been tried on Tuning, so the best Tuning number is op
   - *Weighted bank (NormA-style weighted average, weights = occurrence share):* 0.372 vs. 0.378 for nearest, better on only 12/48.
 - **Our VUS-PR vs. TSB-AD's published numbers (10 Eval series):** MatrixProfile identical on 8/10, Sub-PCA within 0.003. The other 2 (151_Stock_3, 277_NEK_1) reproduce exactly when the window is 125: in TSB-AD's run `find_length_rank` fell back to 125 there, in our environment it returns 5 and 4 (likely a statsmodels version difference; TSB-AD does not pin it). MatrixProfile on all 350 Eval series: identical on **326/350** (93%), mean 0.345 vs. published 0.350. The 24 mismatches are period-estimate disagreements (our period 4–5 on 20, the 125 fallback on 2). List in `results/eval_period_check.csv`; the leaderboard is reported on all 350 and, as a robustness check, on the 326 consistent series.
 
+- **Eval (350 series, frozen configuration, run once):**
+  - Mean VUS-PR 0.333 with the 17 no-motif series as 0 (0.350 over the 333 others); rank 22/42 — below MatrixProfile 0.350, KMeansAD 0.366, KShapeAD 0.401, Sub-PCA 0.423. Same picture on the 326 period-consistent series (0.321, rank 22). Plots: `results/leaderboard.png`, `results/leaderboard_consistent.png`.
+  - Random bank 0.321 (0.338 over 333). Motifs beat random on 164/333, median paired difference 0.000. **On Eval, the quality of the motif bank does not matter — the decoupled answer to the central question.** The Tuning gap (0.378 vs. 0.312) was optimistic, as expected after ~30 variants.
+  - Per series vs. published: wins against KShapeAD 157/350, KMeansAD 168, MatrixProfile 165, Sub-PCA 161 — roughly half each: complementary, not dominated.
+  - Non-periodic series (68): 0.547 vs. KShapeAD 0.24, KMeansAD 0.26, MatrixProfile 0.33 (Sub-PCA 0.64). Strong on server/web metrics: SMD 0.58 (KShapeAD 0.13), WSD 0.36 (0.10), IOPS 0.25 (0.09), Exathlon 0.80 (0.33). Random equally strong there.
+  - Periodic series (282): 0.282 vs. KShapeAD 0.44. Weak on UCR (70 series, 0.11 vs. 0.38), YAHOO (0.14 vs. 0.55), OPPORTUNITY, MGAB, SED — the phase limitation found on Tuning.
+  - Point anomalies (28): 0.097 vs. KShapeAD 0.51 — max aggregation over a motif-length window spreads a single-point spike over the whole window.
+  - LoCoMotif found no motifs in the training part of 17/350 series (SMAP 4, MSL 3, SMD 3, WSD 2, IOPS 2, Stock, Daphnet, LTDB).
+
 ## 7. Phase plan
 
 | Phase | Focus | Status |
@@ -109,7 +118,7 @@ About 30 variants have now been tried on Tuning, so the best Tuning number is op
 | 2 — Representation layer (RQ1) | distance (shape/centred/raw), per-motif features, occurrence-based | Done on Tuning |
 | 3 — Scoring strategies (RQ2) | nearest vs. IsolationForest; min/centre/max aggregation | Done on Tuning |
 | 3b — Last round | periodic weakness, weighted bank | Done, both negative; configuration frozen |
-| 4 — Eval + baselines | frozen config on 350 Eval series; NormA, PBAD | After freeze |
+| 4 — Eval + baselines | frozen config on 350 Eval series; NormA, PBAD | Eval done (0.333, rank 22/42); NormA, PBAD pending |
 | 4b — Propagation study (RQ3) | more `tsmd` backends under the frozen config | After Eval |
 | 5 — Write-up | method + setup now, results after Eval | Started |
 

@@ -3,10 +3,12 @@
 Published per-series VUS-PR exists for the Eval split only (32 detectors from
 the TSB-AD paper plus newer leaderboard entries), so our methods are placed on
 it only from an Eval run. Pass that run's CSV(s) with --ours; rows need
-file, backend, VUS-PR and optionally representation. Methods missing any Eval
-series are listed with their coverage rather than silently averaged.
+file, backend, VUS-PR, status and optionally representation. A failed series
+counts as VUS-PR 0, as in TSB-AD's own benchmark script (PROJECT.md §4).
+--consistent restricts every method to the Eval series where our MatrixProfile
+reproduces the published one (results/eval_period_check.csv).
 
-    .venv/bin/python notebooks/06_leaderboard.py [--ours results/eval_metrics.csv]
+    .venv/bin/python notebooks/06_leaderboard.py [--ours results/eval_metrics.csv] [--consistent]
 """
 
 from __future__ import annotations
@@ -49,7 +51,7 @@ def ours(paths: list[str]) -> pd.DataFrame:
     frames = []
     for path in paths:
         frame = pd.read_csv(path)
-        frame = frame[frame.get("status", "ok") == "ok"]
+        frame = frame.assign(**{"VUS-PR": frame["VUS-PR"].where(frame["status"] == "ok", 0.0)})
         rep = frame["representation"] if "representation" in frame else ""
         frame = frame.assign(method=frame["backend"] + (" [" + rep + "]" if "representation" in frame else ""))
         frames.append(frame.pivot_table(index="file", columns="method", values="VUS-PR"))
@@ -59,9 +61,13 @@ def ours(paths: list[str]) -> pd.DataFrame:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ours", nargs="*", default=[])
+    parser.add_argument("--consistent", action="store_true")
     args = parser.parse_args()
 
     files = pd.read_csv(EVAL_LIST)["file_name"]
+    if args.consistent:
+        check = pd.read_csv(ROOT / "results" / "eval_period_check.csv", index_col="file")
+        files = files[files.isin(check.index[check["consistent"]])]
     table = published().reindex(files)
     mine = ours(args.ours).reindex(files)
     full = pd.concat([table, mine], axis=1)
@@ -73,7 +79,7 @@ def main():
     if len(partial):
         print(f"\nnot on all {len(files)} Eval series: {', '.join(partial.index)}")
 
-    fig, ax = plt.subplots(figsize=(7, 0.22 * len(summary) + 1))
+    fig, ax = plt.subplots(figsize=(9, 0.22 * len(summary) + 1))
     colors = [OURS if o else OTHERS for o in summary["ours"]]
     ax.barh(summary.index, summary["mean VUS-PR"], color=colors, height=0.7)
     for label in ax.get_yticklabels():
@@ -84,9 +90,10 @@ def main():
     ax.grid(axis="x", color="#e6e5e1", linewidth=0.6)
     ax.set_axisbelow(True)
     fig.tight_layout()
-    OUT_PNG.parent.mkdir(exist_ok=True)
-    fig.savefig(OUT_PNG, dpi=150)
-    print(f"\nsaved {OUT_PNG.relative_to(ROOT)}")
+    out = OUT_PNG.with_stem(OUT_PNG.stem + "_consistent") if args.consistent else OUT_PNG
+    out.parent.mkdir(exist_ok=True)
+    fig.savefig(out, dpi=150)
+    print(f"\nsaved {out.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":
