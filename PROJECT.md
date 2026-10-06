@@ -1,6 +1,6 @@
 # Motif-Based Representation Learning for Time Series Anomaly Detection
 
-**Status as of 2026-10-05:** Eval done (frozen configuration, 350 series). VUS-PR **0.333** (failures as 0; 0.350 over the 333 series with motifs) — rank **22 of 42** on the TSB-AD-U leaderboard, between CNN (0.343) and LSTMAD (0.325). Random bank 0.321; motifs beat random on only 164/333 series (median difference 0.000). The Tuning result (0.378, 30/48 vs. random) did not carry over. Next: write-up around the decoupling answer, RQ3 with more backends, NormA/PBAD (§5).
+**Status as of 2026-10-05:** Eval done (frozen configuration, 350 series). VUS-PR **0.333** (failures as 0; 0.350 over the 333 series with motifs) — rank **22 of 42** on the TSB-AD-U leaderboard, between CNN (0.343) and LSTMAD (0.325). Random bank 0.321; motifs beat random on only 164/333 series (median difference 0.000). The Tuning result (0.378, 30/48 vs. random) did not carry over. Next: write-up around the decoupling answer, RQ3 with more backends, NormA/PBAD (§5). Cycle 2 plan (Oct–Feb) in §5.
 
 ## 1. Goal
 
@@ -53,29 +53,35 @@ LoCoMotif with `rho=0.6` (other settings default), motifs discovered on the trai
 
 **Failure rule (fixed 2026-10-03 before any Eval score was read):** at 263/350, LoCoMotif found no motifs in the training part of 17 series (SMAP 4, MSL 3, SMD 3, WSD 2, IOPS 2, Stock 1, Daphnet 1, LTDB 1). Headline number counts every failure as VUS-PR 0 — TSB-AD's own benchmark script does the same (`list_w = [0]*9` on exception). Also reported: mean over successful series with the failure count. The configuration is not changed because of Eval failures.
 
-## 5. What to do now — plan after the Tuning results (2026-10-01)
+## 5. Research plan, October 2026 – February 2027 (cycle 2)
 
-Supervisor goal (meeting 2026-09-29, Louis's email 2026-09-30): see how far *existing* motif methods can go — changing their hyperparameters is allowed, new methods are not the point; rank against all TSB-AD detectors (ideal 1st, good top 5–10); compare with methods that build a reference bank of normal subsequences (KShapeAD, KMeansAD, NormA, PBAD). Don't overfit.
+Cycle 1 (Sept) built the pipeline, froze one configuration and ran Eval once: 0.333, rank 22/42, motif bank = random bank. Cycle 2 uses the remaining ~5 months to answer the RQs properly and push "how far can a motif bank go" — with a larger development set so Eval stays clean.
 
-About 30 variants have now been tried on Tuning, so the best Tuning number is optimistic. The plan is one bounded last round, then freeze, then Eval once.
+**Framing (Louis, 2026-09-30):** build a representative **bank of normal subsequences** with motif discovery → distances from test subsequences to the bank → aggregate (e.g. max) into an anomaly score. Compare with other ways of building the bank: clustering centroids (KShapeAD, KMeansAD), NormA's weighted hierarchical-clustering model, PBAD's frequent patterns in a discretised series.
 
-**Step 1 — last round on Tuning (time-box: 1 week, decided before running).** Only two items, each motivated by the supervisor or by a diagnosed weakness:
-- *Periodic-series weakness.* Motifs score 0.30 on periodic series vs. KShapeAD 0.46, but 0.58–0.61 on non-periodic ones vs. 0.10. Shape-only (z-norm) collapses from 0.31 with min-aggregation to 0.13 with centre-aggregation on periodic series — diagnose why (suspect: z-normalising near-flat windows amplifies noise, which MatrixProfile/stumpy guards against). If it is a defect, fix it; if not, record it as a limitation. No per-series switching between variants.
-- *Weighted reference bank* (Louis: integrate components of other methods; NormA weights its normal model). One fixed formula: weight each motif by its number of occurrences. One run.
+**RQs restated in that framing**
+- **RQ1 — building the bank:** which motif method and settings; what goes in the bank (all occurrences, one representative per motif, all phases); weights; continuous vs. discretised patterns; learned on the training part vs. whole series.
+- **RQ2 — from distances to a score:** normalisation (shape / amplitude / both), aggregation (max / centre / multi-scale), per-motif distance vector + an existing detector (kNN, IForest, OCSVM).
+- **RQ3 — does bank quality matter:** random bank on every series, a bank-degradation curve, a spread of motif methods, and the occurrence-based signal.
+- **Final goal:** rank of the best motif bank among the 41 published TSB-AD-U detectors (good: top 10, > 0.401).
 
-**Step 2 — freeze.** Pick the configuration by mean VUS-PR over all 48 series, with no failures and a positive gap to its random floor. Current choice: LoCoMotif `rho=0.6`, training part, nearest, max (§6). Write the frozen configuration into §4 before Step 3.
+**Protocol for cycle 2**
+- **Development set = Tuning (48) + the 472 TSB-AD-U series outside Tuning and Eval** (YAHOO 224, UCR 152, WSD 86, Stock 10). Skewed towards periodic/shape data — exactly the known weakness — so results are always reported per source as well. A fixed, stratified subsample of ~150 series for fast iteration; full 520 to confirm.
+- Every design decision on the dev set by a rule written down before the run. Eval is touched once more, at the end, with the frozen cycle-2 configuration. The cycle-1 Eval result (0.333) is reported as is — the thesis shows both, transparently.
 
-**Step 3 — check our evaluation against TSB-AD's.** Run MatrixProfile through our `evaluate` on ~10 Eval series and compare with the published per-series VUS-PR. If they match, the leaderboard comparison is valid.
+**Work packages**
 
-**Step 4 — Eval once (350 series).** Frozen configuration plus its random floor. Motif discovery on the training part only. Estimate several days on the laptop (lid open, plugged in); a university machine would help. Then `06_leaderboard.py --ours` and the per-type analysis on Eval (the published table carries point/sequence-anomaly metadata).
+| weeks | WP | what | answers |
+|---|---|---|---|
+| 1 | 0 — setup | dev split + subsample; compute (university machine?); meeting with Louis; NormA password email | — |
+| 1–3 | 1 — RQ3 on cycle 1 | bank-degradation curve (0/25/50/75/100% random occurrences) on Eval and dev; all working `tsmd` methods (k-Motiflets, SetFinder, STOMP, PanMP, VALMOD, LatentMotif, A-PEPA, MDL-Clust, LoCoMotif) with random banks on dev; occurrence signal on Eval | RQ3 for the cycle-1 design |
+| 3–8 | 2 — bank construction | best methods from WP1 × bank content (occurrences / one representative per motif / phase-complete / fixed size of 10 like KMeansAD) × weights (NormA-style) × discretised bank (SAX + frequent patterns, PBAD-style) | RQ1 |
+| 8–12 | 3 — scoring | shape + amplitude distances as one per-motif vector; multi-scale windows for point anomalies; aggregation; existing detectors on the vector. Targets the measured weaknesses: periodic shape anomalies (UCR, YAHOO), point anomalies | RQ2 |
+| 1–12 | 4 — baselines | NormA (password), PBAD (authors' code or a faithful re-implementation), published KShapeAD/KMeansAD/MatrixProfile | comparison |
+| 13–14 | 5 — final | freeze cycle-2 configuration on dev; Eval once; leaderboard; random bank + degradation curve on Eval | final goal, RQ3 |
+| 14–20 | 6 — writing | method/setup chapters start in week 2; results chapters after each WP; buffer | thesis |
 
-**Step 5 — reference-bank baselines (in parallel with Step 4).** NormA: email Boniol/Palpanas for the TSB-AD ZIP password. PBAD (Feremans et al. 2019): find the authors' code and run it on Eval. KShapeAD/KMeansAD: published Eval numbers already exist.
-
-**Step 6 — RQ3 depth.** Same frozen configuration with more `tsmd` backends (SetFinder, STOMP, PanMP; maybe LAMA) for a spread of motif quality, each with its random floor. Main question: does the gap to random grow with the backend? Plus the occurrence-based finding (motifs beat random on 39/48 there).
-
-**Step 7 — writing, starting now.** Method (reference-bank framing from Louis's email) and experimental setup (splits, window rule, random floor, metric) are stable and can be written.
-
-**Train/test split (for the write-up):** motifs are learned on TSB-AD's `tr_<end>` prefix (5–47% of a series, median 25%), extended to at least 4 × the minimum motif length (2 Tuning series). The whole series is scored, as TSB-AD does for its semi-supervised detectors. Caveat: on 7/48 Tuning series the first anomaly lies inside the prefix, so it is not guaranteed anomaly-free.
+**Decision points with Louis:** after WP1 (which motif methods are worth building banks from), after WP2 (which bank goes into WP3), before WP5 (freeze).
 
 ## 6. Findings so far
 
@@ -121,6 +127,7 @@ About 30 variants have now been tried on Tuning, so the best Tuning number is op
 | 4 — Eval + baselines | frozen config on 350 Eval series; NormA, PBAD | Eval done (0.333, rank 22/42); NormA, PBAD pending |
 | 4b — Propagation study (RQ3) | more `tsmd` backends under the frozen config | After Eval |
 | 5 — Write-up | method + setup now, results after Eval | Started |
+| Cycle 2 | dev set of 520 series; RQ1–RQ3 work packages; final Eval | §5, Oct 2026 – Feb 2027 |
 
 ## 8. Open decisions to raise with the supervisor
 
