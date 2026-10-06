@@ -57,6 +57,12 @@ tuning = importlib.import_module("01_tuning_set")
 OUT_CSV = ROOT / "results" / "trained_metrics.csv"
 MASK_DIR = ROOT / "results" / "masks_train"
 SCORERS = ["nearest", "iforest", "weighted"]
+SPLITS = {  # name -> (file list, output CSV)
+    "tuning": (tuning.FILE_LIST, OUT_CSV),
+    "eval": (tuning.FILE_LIST.with_name("TSB-AD-U-Eva.csv"), OUT_CSV.with_name("eval_metrics.csv")),
+    "dev": (ROOT / "splits" / "dev.csv", OUT_CSV.with_name("dev_metrics.csv")),
+    "dev_small": (ROOT / "splits" / "dev_small.csv", OUT_CSV.with_name("dev_metrics.csv")),
+}
 
 
 def train_end(filename: str, period: int) -> int:
@@ -86,11 +92,13 @@ def main():
     parser.add_argument("--files", default=None, help="comma-separated subset")
     parser.add_argument("--params", default="", help="discovery hyperparameters, e.g. k_max=20")
     parser.add_argument("--point", default="centre", help="window->point aggregation: centre or max")
-    parser.add_argument("--split", default="tuning", choices=["tuning", "eval"])
+    parser.add_argument("--split", default="tuning", choices=list(SPLITS))
+    parser.add_argument("--random-fractions", default="1",
+                        help="random-bank variants: share of occurrences moved, e.g. 0.25,0.5,0.75,1")
     args = parser.parse_args()
-    file_list = tuning.FILE_LIST if args.split == "tuning" else tuning.FILE_LIST.with_name("TSB-AD-U-Eva.csv")
-    out_csv = OUT_CSV if args.split == "tuning" else OUT_CSV.with_name("eval_metrics.csv")
-    scorers = SCORERS if args.split == "tuning" else ["nearest"]  # the frozen scorer only
+    file_list, out_csv = SPLITS[args.split]
+    scorers = ["nearest"] if args.split == "eval" else SCORERS  # Eval: the frozen scorer only
+    fractions = [float(f) for f in args.random_fractions.split(",") if f]
     params = {k: float(v) if "." in v else int(v) for k, v in (kv.split("=") for kv in args.params.split(",") if kv)}
     tag = f"[{args.params}]" if params else ""
     suffix = "" if args.point == "centre" else f"-{args.point}"
@@ -112,7 +120,8 @@ def main():
 
         for backend in args.backends.split(","):
             label = backend + tag
-            for variant, shuffle in ((label, False), (f"{label}+random", True)):
+            variants = [(label, None)] + [(f"{label}+random" + ("" if f == 1 else f"{f:g}"), f) for f in fractions]
+            for variant, fraction in variants:
                 todo = [sc for sc in scorers if (filename, variant, f"train-{sc}{suffix}") not in done]
                 if not todo:
                     continue
@@ -124,7 +133,8 @@ def main():
                                                series.values[:n_train],
                                                functools.partial(factories[backend], **params), period)
                     rng = np.random.default_rng(2024)
-                    occ = pooled_occurrences(segments, (lambda m: shuffle_mask(m, rng)) if shuffle else None)
+                    occ = pooled_occurrences(segments, None if fraction is None else
+                                             lambda m: shuffle_mask(m, rng, fraction))
                     rows = []
                     for scorer, score in scores(series.values, occ, n_train, args.point).items():
                         if scorer not in todo:

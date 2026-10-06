@@ -40,13 +40,10 @@ KEEP = ["VUS-PR", "AUC-PR", "VUS-ROC", "AUC-ROC", "Standard-F1"]
 
 
 def backend_factories():
-    from tsmd.competitors.locomotif import LocoMotif
-    from tsmd.competitors.motiflets_numba import Motiflets_numba
+    """All motif backends and their settings rule live in src/backends.py."""
+    from backends import factories
 
-    return {  # extra keyword arguments override the discovery defaults (05_trained.py --params)
-        "k-Motiflets": lambda lo, hi, **kw: Motiflets_numba(**{"k_max": 10, **kw}, min_wlen=lo, max_wlen=hi),
-        "LoCoMotif": lambda lo, hi, **kw: LocoMotif(min_wlen=lo, max_wlen=hi, **kw),
-    }
+    return factories()
 
 
 def done_keys(path: Path) -> set[tuple[str, str]]:

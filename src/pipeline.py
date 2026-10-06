@@ -154,14 +154,26 @@ def segmented_score(signal, make_model, period, segment_len: int = SEGMENT_LEN, 
     return score_segments(signal, discover(signal, make_model, period, segment_len), mask_hook, **rep)
 
 
-def shuffle_mask(mask: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    """RQ3 floor: same number of occurrences, same lengths, random positions."""
+def shuffle_mask(mask: np.ndarray, rng: np.random.Generator, fraction: float = 1.0) -> np.ndarray:
+    """RQ3 floor: same number of occurrences, same lengths, random positions.
+
+    With `fraction` < 1 only that share of the occurrences (chosen at random) is
+    moved and the rest stay where the motif method put them — the
+    bank-degradation curve. `fraction=1` moves all of them, drawing exactly the
+    same random numbers as before, so earlier random-floor results reproduce.
+    """
     from representation import occurrences_from_mask
 
     n = mask.shape[1]
+    occurrences = occurrences_from_mask(mask)
+    move = np.ones(len(occurrences), bool)
+    if fraction < 1:
+        move[:] = False
+        move[rng.permutation(len(occurrences))[: int(round(fraction * len(occurrences)))]] = True
     out = np.zeros_like(mask)
-    for pattern, start, end in occurrences_from_mask(mask):
+    for (pattern, start, end), moved in zip(occurrences, move):
         length = end - start + 1
-        new_start = int(rng.integers(0, max(1, n - length)))
-        out[pattern, new_start : new_start + length] = 1
+        if moved:
+            start = int(rng.integers(0, max(1, n - length)))
+        out[pattern, start : start + length] = 1
     return out

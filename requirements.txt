@@ -13,3 +13,4 @@ leitmotif==0.3.5
 #   pip install -e external/TSB-AD   # datasets, labels, VUS-PR via get_metrics()
 -e external/TSMD
 -e external/TSB-AD
+plotly==7.1.0  # imported by tsmd's PEPA/A-PEPA code, not listed in its requirements
