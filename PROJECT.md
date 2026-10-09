@@ -115,6 +115,12 @@ Cycle 1 (Sept) built the pipeline, froze one configuration and ran Eval once: 0.
   - Point anomalies (28): 0.097 vs. KShapeAD 0.51 — max aggregation over a motif-length window spreads a single-point spike over the whole window.
   - LoCoMotif found no motifs in the training part of 17/350 series (SMAP 4, MSL 3, SMD 3, WSD 2, IOPS 2, Stock, Daphnet, LTDB).
 
+- **WP1 (2026-10-09) — does bank quality matter?**
+  - *Bank-degradation curve, Eval, frozen configuration:* 0% → 25% → 50% → 75% → 100% of occurrences moved to random positions gives VUS-PR 0.333 → 0.331 → 0.325 → 0.321 → 0.321 (failures as 0). Wilcoxon real vs. each level: p = 0.65 / 0.65 / 0.10 / 0.34. Practically flat.
+  - *9 motif methods on dev_small (150 series), same pipeline, each with a random bank:* STOMP 0.275 (random 0.259), LoCoMotif 0.269 (0.239), PanMP 0.242 (0.223), k-Motiflets 0.236 (0.227), SetFinder 0.235 (0.266), A-PEPA 0.231 (0.214), VALMOD 0.216 (0.217), MDL-Clust 0.212 (0.196), LatentMotif 0.184 (0.189). Gaps −0.031 to +0.031; wins ≈ half. Wilcoxon: LoCoMotif p = 0.001 (survives Bonferroni over 9), MDL-Clust 0.007, k-Motiflets 0.011; SetFinder's random bank is *better* (p = 0.03). The simplest method (STOMP) has the highest mean.
+  - *Failures:* LatentMotif finds no motifs on 67/150; PanMP crashes on 23 (index error inside tsmd), A-PEPA on 19 (empty argmax), VALMOD 4 (attribute error), LoCoMotif and MDL-Clust 4 each (no motifs). PEPA unusable (crashes in its own code).
+  - *Reading:* motif quality has a small, sometimes statistically detectable effect on dev (≤ 0.03), none detectable on Eval, and no ordering by sophistication. Decoupled in practice.
+
 ## 7. Phase plan
 
 | Phase | Focus | Status |
