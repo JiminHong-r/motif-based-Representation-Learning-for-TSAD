@@ -1,0 +1,14 @@
+# One motif spans all dimensions (LoCoMotif multivariate)
+name = "M-LoCoMotif-all"
+[data]
+dataset = "M"
+[bank]
+backend = "LoCoMotif/all-dims"
+params = {}
+source = "train"
+random_fractions = [1.0]
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "max"

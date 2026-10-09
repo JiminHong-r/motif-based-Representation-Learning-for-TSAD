@@ -29,13 +29,14 @@ OUT_PNG = ROOT / "results" / "leaderboard.png"
 OURS, OTHERS = "#2a78d6", "#c3c2bd"
 
 
-def published() -> pd.DataFrame:
+def published(dataset: str = "U") -> pd.DataFrame:
     """file x method VUS-PR over the Eval split, from TSB-AD's published tables."""
-    table = pd.read_csv(BENCH / "benchmark_eval_results" / "uni_mergedTable_VUS-PR.csv").set_index("file")
+    prefix = {"U": ("uni", "Uni"), "M": ("multi", "Multi")}[dataset]
+    table = pd.read_csv(BENCH / "benchmark_eval_results" / f"{prefix[0]}_mergedTable_VUS-PR.csv").set_index("file")
     meta = ["ts_len", "anomaly_len", "num_anomaly", "avg_anomaly_len", "anomaly_ratio", "point_anomaly", "seq_anomaly"]
     table = table.drop(columns=meta)
-    for path in sorted((BENCH / "leaderboard_results").glob("Uni_*.csv")):
-        name = path.stem.removeprefix("Uni_")
+    for path in sorted((BENCH / "leaderboard_results").glob(f"{prefix[1]}_*.csv")):
+        name = path.stem.removeprefix(f"{prefix[1]}_")
         frame = pd.read_csv(path)
         key = "file" if "file" in frame else "filename"
         # one column per method: named after the file, "VUS-PR", or variants like "TSPulse (ZS)"

@@ -160,6 +160,23 @@ external/TSMD, external/TSB-AD  pinned submodules (not our code)
 data/, results/                 gitignored
 ```
 
+## 9b. Running experiments (config-driven pipeline, 2026-10-09)
+
+Every experiment is one TOML file in `configs/`; `src/config.py` lists every setting with its meaning and default (the cycle-1 frozen configuration). The runner copies the config next to its results, so every number traces back to its settings.
+
+```
+.venv/bin/python notebooks/run.py configs/U-LoCoMotif.toml --split dev_small   # → results/runs/U-LoCoMotif/dev_small.csv
+.venv/bin/python notebooks/02_baselines.py --split dev_small                  # baselines on the same series
+.venv/bin/python notebooks/compare.py --dataset U --split dev_small            # table + plot (methods × VUS-PR)
+```
+
+- **Pipeline per series:** period (TSB-AD `find_length_rank`, first dimension) → bank: motif discovery on the training part (cached in `results/masks_<source>/<bank label>/`) → per-motif distance of every window (each dimension normalised separately; only the motif's dimensions; no self-matches) → scorer → window-to-point aggregation → min-max → VUS-PR. Each config also runs its random bank(s).
+- **Settings:** dataset (U/M); bank: backend, backend params, source (train/whole), random_fractions, segment_len, motif-length rule; distance: norm; score: scorer, point; eval: failure_value.
+- **Splits:** U — tuning 48, dev_small 150, dev 520, eval 350; M — tuning 20, eval 180 (TSB-AD-M has no other series, so M is developed on its 20 Tuning series only — keep M variants few).
+- **Multivariate banks (`backends.multivariate_factories`):** per dimension (VALMOD, PEPA, A-PEPA, STOMP, LoCoMotif run on each dimension), all dimensions (LoCoMotif multivariate, mSTAMP), subset of dimensions (mSTAMP k-dimensional motifs, subspace chosen by MDL). Candidates still to add: LAMA/leitmotifs (PyPI `leitmotif`), SubTSMD (no public code).
+- **Comparison:** `compare.py` on Eval adds TSB-AD's published per-series VUS-PR (U: 41 detectors, M: 31) — the final methods × VUS-PR plot.
+- Check: the runner reproduces the cycle-1 numbers exactly (`U-LoCoMotif` on dev_small).
+
 ## 10. Key references
 
 - TSAD foundations: Schmidl et al. (VLDB 2022); Liu & Paparrizos, *TSB-AD* (NeurIPS 2024); Boniol et al., decade review (2024)

@@ -38,10 +38,10 @@ DETECTORS = ["MatrixProfile", "KShapeAD", "Series2Graph", "KMeansAD_U", "SAND", 
 
 def run_detector(name: str, filename: str, values: np.ndarray) -> np.ndarray:
     from TSB_AD import model_wrapper as mw
-    from TSB_AD.HP_list import Optimal_Uni_algo_HP_dict
+    from TSB_AD.HP_list import Optimal_Multi_algo_HP_dict, Optimal_Uni_algo_HP_dict
 
-    data = values.reshape(-1, 1)
-    hp = Optimal_Uni_algo_HP_dict[name]
+    data = values.reshape(-1, 1) if values.ndim == 1 else values
+    hp = (Optimal_Uni_algo_HP_dict if values.ndim == 1 else Optimal_Multi_algo_HP_dict)[name]
     if name in mw.Semisupervise_AD_Pool:
         train_end = int(Path(filename).stem.split("_")[-3])  # ..._tr_<end>_1st_<idx>
         out = getattr(mw, f"run_{name}")(data[:train_end], data, **hp)
@@ -54,10 +54,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--detectors", default=",".join(DETECTORS))
     parser.add_argument("--files", default=None, help="comma-separated subset")
-    parser.add_argument("--split", default="tuning", choices=["tuning", "eval"])
+    parser.add_argument("--split", default="tuning", choices=["tuning", "eval", "dev", "dev_small"])
+    parser.add_argument("--dataset", default="U", choices=["U", "M"])
     args = parser.parse_args()
-    file_list = tuning.FILE_LIST if args.split == "tuning" else tuning.FILE_LIST.with_name("TSB-AD-U-Eva.csv")
-    out_csv = OUT_CSV if args.split == "tuning" else OUT_CSV.with_name("baseline_eval_metrics.csv")
+    lists = tuning.FILE_LIST.parent
+    file_list = {"tuning": lists / f"TSB-AD-{args.dataset}-Tuning.csv", "eval": lists / f"TSB-AD-{args.dataset}-Eva.csv",
+                 "dev": ROOT / "splits" / "dev.csv", "dev_small": ROOT / "splits" / "dev_small.csv"}[args.split]
+    out_csv = OUT_CSV.with_name({("U", "tuning"): "baseline_metrics.csv", ("U", "eval"): "baseline_eval_metrics.csv"}.get(
+        (args.dataset, args.split), f"baseline_{args.dataset}_{args.split}_metrics.csv"))
 
     from TSB_AD.utils.slidingWindows import find_length_rank
 
@@ -70,7 +74,8 @@ def main():
             print(f"[{i}/{len(files)}] MISSING {filename}")
             continue
         series = load_series(filename)
-        period = max(4, int(find_length_rank(series.values.reshape(-1, 1), rank=1)))
+        first = series.values if series.values.ndim == 1 else series.values[:, 0]  # TSB-AD: first dimension
+        period = max(4, int(find_length_rank(first.reshape(-1, 1), rank=1)))
         n = len(series)
         print(f"\n[{i}/{len(files)}] {filename}  n={n}  period={period}", flush=True)
 

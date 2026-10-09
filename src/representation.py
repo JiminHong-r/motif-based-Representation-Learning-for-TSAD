@@ -164,34 +164,53 @@ def uncovered_fraction(signal: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return 1.0 - np.convolve(covered, np.ones(wlen) / wlen, mode="same")
 
 
-def motif_features(signal: np.ndarray, occurrences: list, norm: str = "centred", chunk: int = 20000):
-    """RQ1 per-motif variant: every window's distance to each motif separately.
+def motif_features(signal: np.ndarray, occurrences: list, norm: str = "centred", budget: float = 2e7):
+    """Per-motif distances for every window; univariate or multivariate.
 
-    `occurrences` are (motif_id, start, end) in `signal` coordinates. Column k of
-    the result is the window's distance to its nearest occurrence of motif k
-    (like KMeansAD's distance to each of its centres), with self-matches
-    excluded as in `distance_to_nearest_motif`. Returns
-    (features of shape (n_windows, n_motifs), wlen). Chunked so a 650k-point
-    series fits in memory.
+    `occurrences` are (motif_id, start, end) or (motif_id, start, end, dims),
+    in `signal` coordinates; `dims` is the tuple of columns the motif lives in
+    (None = all). A window is compared with an occurrence only on that
+    occurrence's dimensions: each dimension normalised separately, the
+    per-dimension windows concatenated, and the Euclidean distance divided by
+    sqrt(len(dims)) so motifs on different numbers of dimensions are comparable.
+    For a univariate series this is plain distance on one dimension.
+
+    Column k is the window's distance to its nearest occurrence of motif k
+    (like KMeansAD's distance to each centroid); occurrences overlapping the
+    window are excluded (no self-matches). Returns (features, wlen).
     """
-    signal = np.asarray(signal, dtype=np.float64)
-    occurrences = sorted(occurrences)
-    if not occurrences:
+    x = np.asarray(signal, dtype=np.float64)
+    x = x[:, None] if x.ndim == 1 else x
+    occ = sorted((o[0], o[1], o[2], tuple(range(x.shape[1])) if len(o) < 4 or o[3] is None else tuple(o[3]))
+                 for o in occurrences)
+    if not occ:
         raise ValueError("no motif occurrences")
-    ids = np.array([m for m, _, _ in occurrences])
-    starts = np.array([s for _, s, _ in occurrences])
-    ends = np.array([e for _, _, e in occurrences])
-    wlen = max(4, min(int(np.median(ends - starts + 1)), len(signal)))
-    refs = _normalise(np.vstack([_resample(signal[s : e + 1], wlen) for s, e in zip(starts, ends)]), norm)
-    first_of_motif = np.flatnonzero(np.r_[True, ids[1:] != ids[:-1]])
+    ids = np.array([o[0] for o in occ])
+    motif_ids = np.unique(ids)
+    wlen = max(4, min(int(np.median([e - s + 1 for _, s, e, _ in occ])), len(x)))
+    n_windows = len(x) - wlen + 1
+    out = np.full((n_windows, len(motif_ids)), np.inf)
 
-    all_windows = np.lib.stride_tricks.sliding_window_view(signal, wlen)
-    out = np.empty((len(all_windows), len(first_of_motif)))
-    for c in range(0, len(all_windows), chunk):
-        distance = cdist(_normalise(all_windows[c : c + chunk], norm), refs)
-        t = np.arange(c, c + len(distance))[:, None]
-        distance[(starts <= t + wlen - 1) & (ends >= t)] = np.inf
-        out[c : c + len(distance)] = np.minimum.reduceat(distance, first_of_motif, axis=1)
+    def windows(dims, rows):  # (len(rows), len(dims) * wlen), each dimension normalised separately
+        w = np.lib.stride_tricks.sliding_window_view(x[:, dims], wlen, axis=0)[rows]  # (k, d, wlen)
+        return _normalise(w.reshape(-1, wlen), norm).reshape(len(w), -1) / np.sqrt(len(dims))
+
+    for dims in sorted({o[3] for o in occ}):
+        group = [i for i, o in enumerate(occ) if o[3] == dims]
+        d = list(dims)
+        refs = np.vstack([
+            _normalise(np.stack([_resample(x[s:e + 1, j], wlen) for j in d]), norm).reshape(-1) / np.sqrt(len(d))
+            for _, s, e, _ in (occ[i] for i in group)
+        ])
+        starts = np.array([occ[i][1] for i in group]); ends = np.array([occ[i][2] for i in group])
+        col = np.searchsorted(motif_ids, ids[group])
+        chunk = max(256, int(budget // (wlen * len(d) + len(group))))
+        for c in range(0, n_windows, chunk):
+            rows = np.arange(c, min(c + chunk, n_windows))
+            distance = cdist(windows(d, rows), refs)
+            distance[(starts <= rows[:, None] + wlen - 1) & (ends >= rows[:, None])] = np.inf
+            for k in np.unique(col):
+                out[rows, k] = np.minimum(out[rows, k], distance[:, col == k].min(axis=1))
     # a window overlapping every occurrence of a motif has nothing left to match
     finite = np.where(np.isfinite(out), out, -np.inf).max(axis=0)
     return np.where(np.isfinite(out), out, np.maximum(finite, 0.0)), wlen

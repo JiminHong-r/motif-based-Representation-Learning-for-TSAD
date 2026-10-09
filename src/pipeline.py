@@ -31,10 +31,10 @@ SEGMENT_LEN = 8000
 MIN_WLEN_FLOOR = 16
 
 
-def window_bounds(period: int) -> tuple[int, int]:
+def window_bounds(period: int, floor: int = MIN_WLEN_FLOOR, factor: float = 2.0) -> tuple[int, int]:
     """Motif length range from the estimated period. One rule for all series."""
-    low = max(MIN_WLEN_FLOOR, int(period))
-    return low, 2 * low
+    low = max(floor, int(period))
+    return low, int(factor * low)
 
 
 def segment_spans(n: int, segment_len: int, margin: int):
@@ -64,34 +64,40 @@ def segment_spans(n: int, segment_len: int, margin: int):
     return spans
 
 
-def fit_mask(make_model, signal: np.ndarray) -> np.ndarray:
-    """Fit one tsmd backend and return its (n_patterns, n_samples) mask."""
+def fit_mask(make_model, signal: np.ndarray):
+    """Fit one backend; return its (n_patterns, n_samples) mask and, for
+    multivariate motifs, the dimensions of each pattern (None = not reported)."""
     model = make_model()
     model.fit(signal)
-    return np.atleast_2d(np.asarray(model.prediction_mask_))
+    return np.atleast_2d(np.asarray(model.prediction_mask_)), getattr(model, "prediction_dims_", None)
 
 
-def discover(signal: np.ndarray, make_model, period: int, segment_len: int = SEGMENT_LEN) -> list:
+def discover(signal: np.ndarray, make_model, period: int, segment_len: int = SEGMENT_LEN,
+             bounds: tuple[int, int] | None = None) -> list:
     """Run the backend on every segment. The slow step, so its output is cached.
 
     Returns one (start, end, write_start, write_end, occurrences) per segment,
-    `occurrences` being (pattern, start, end) triples relative to the segment,
+    `occurrences` being (pattern, start, end) triples relative to the segment
+    — (pattern, start, end, dims) when the backend reports dimensions —
     or None where the segment is too short to fit.
     """
     from representation import occurrences_from_mask
 
     signal = np.asarray(signal, dtype=np.float64)
-    min_wlen, max_wlen = window_bounds(period)
+    min_wlen, max_wlen = bounds or window_bounds(period)
     out = []
     for start, end, write_start, write_end in segment_spans(len(signal), segment_len, max_wlen):
         occ = None
         if end - start >= 4 * min_wlen:  # too short for motifs to be meaningful
-            occ = occurrences_from_mask(fit_mask(lambda: make_model(min_wlen, max_wlen), signal[start:end]))
+            mask, dims = fit_mask(lambda: make_model(min_wlen, max_wlen), signal[start:end])
+            occ = occurrences_from_mask(mask)
+            if dims is not None:
+                occ = [(p, s, e, tuple(dims[p])) for p, s, e in occ]
         out.append((start, end, write_start, write_end, occ))
     return out
 
 
-def discover_cached(path, signal, make_model, period, segment_len: int = SEGMENT_LEN) -> list:
+def discover_cached(path, signal, make_model, period, segment_len: int = SEGMENT_LEN, bounds=None) -> list:
     """`discover`, pickled to `path`; motif backends here are deterministic."""
     import pickle
     from pathlib import Path
@@ -99,7 +105,7 @@ def discover_cached(path, signal, make_model, period, segment_len: int = SEGMENT
     path = Path(path)
     if path.exists():
         return pickle.loads(path.read_bytes())
-    segments = discover(signal, make_model, period, segment_len)
+    segments = discover(signal, make_model, period, segment_len, bounds)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(pickle.dumps(segments))
     return segments
@@ -127,24 +133,29 @@ def score_segments(signal: np.ndarray, segments: list, mask_hook=None,
 
 
 def _segment_mask(occ: list, length: int) -> np.ndarray:
-    mask = np.zeros((max(p for p, _, _ in occ) + 1, length), dtype=np.int8)
-    for pattern, s, e in occ:
+    mask = np.zeros((max(o[0] for o in occ) + 1, length), dtype=np.int8)
+    for pattern, s, e, *_ in occ:
         mask[pattern, s : e + 1] = 1
     return mask
 
 
 def pooled_occurrences(segments: list, mask_hook=None) -> list:
-    """All segments' occurrences in series coordinates, one motif id per (segment, pattern)."""
+    """All segments' occurrences in series coordinates, one motif id per (segment, pattern).
+
+    Occurrences keep their motif's dimensions (4th element) when discovery recorded them.
+    """
     from representation import occurrences_from_mask
 
     out, next_id = [], 0
     for start, end, _, _, occ in segments:
         if not occ:
             continue
+        dims = {o[0]: o[3] for o in occ if len(o) > 3}
         mask = _segment_mask(occ, end - start)
         if mask_hook is not None:
             mask = mask_hook(mask)
-        out += [(next_id + p, start + s, start + e) for p, s, e in occurrences_from_mask(mask)]
+        out += [(next_id + p, start + s, start + e) + ((dims[p],) if dims else ())
+                for p, s, e in occurrences_from_mask(mask)]
         next_id += mask.shape[0]
     return out
 

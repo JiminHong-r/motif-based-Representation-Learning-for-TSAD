@@ -15,6 +15,18 @@ backend gets the same a-priori rule instead (PROJECT.md §5, WP1):
 
 Each factory is `make(min_wlen, max_wlen, **overrides)` returning an object
 with `.fit(signal)` and `.prediction_mask_`, as `pipeline.discover` expects.
+
+Multivariate (TSB-AD-M), three ways to get a motif bank — `MULTIVARIATE`:
+
+* per dimension: a univariate method on each dimension separately
+  (`PerDimension`), every motif living in one dimension;
+* all dimensions: one motif spans every dimension (LoCoMotif's native
+  multivariate mode; mSTAMP with all dimensions);
+* subset of dimensions: each motif lives in the dimensions the method selects
+  (mSTAMP k-dimensional motifs, Yeh et al. 2017, subspace chosen by MDL).
+
+Multivariate backends also set `.prediction_dims_`: one tuple of column
+indices per mask row. Constant columns are dropped before discovery.
 """
 
 from __future__ import annotations
@@ -85,3 +97,82 @@ def factories() -> dict:
         "A-PEPA": lambda lo, hi, **kw: AdaptativeBasePersistentPattern(wlen_for_persistence=lo, **kw),
         "MDL-Clust": lambda lo, hi, **kw: MDL(min_wlen=lo, max_wlen=hi, **kw),
     }
+
+
+def _varying(X: np.ndarray) -> np.ndarray:
+    """Columns that are not constant (z-normalised distances are undefined on constant ones)."""
+    return np.flatnonzero(np.nanstd(X, axis=0) > 0)
+
+
+class PerDimension:
+    """A univariate backend run on every dimension separately."""
+
+    def __init__(self, make_univariate):
+        self.make = make_univariate
+
+    def fit(self, X):
+        rows, dims = [], []
+        for j in _varying(X):
+            try:
+                model = self.make(); model.fit(X[:, j])
+                mask = np.atleast_2d(np.asarray(model.prediction_mask_))
+            except Exception:  # a dimension where the method fails or finds nothing
+                continue
+            rows.append(mask); dims += [(int(j),)] * len(mask)
+        self.prediction_mask_ = np.vstack(rows) if rows else np.zeros((1, len(X)))
+        self.prediction_dims_ = dims or [(0,)]
+        return self
+
+
+class MSTAMP:
+    """mSTAMP motifs (stumpy.mstump + stumpy.mmotifs, package defaults otherwise).
+
+    `subspace=True`: each motif's dimensions chosen by MDL (subset of attributes);
+    `subspace=False`: every motif uses all varying dimensions.
+    """
+
+    def __init__(self, wlen: int, n_patterns: int = N_PATTERNS, max_matches: int = 10, subspace: bool = True):
+        self.wlen, self.n_patterns, self.max_matches, self.subspace = wlen, n_patterns, max_matches, subspace
+
+    def fit(self, X):
+        import stumpy
+
+        cols = _varying(X)
+        T = np.ascontiguousarray(X[:, cols].T)
+        P, I = stumpy.mstump(T, m=self.wlen)
+        kw = {} if self.subspace else {"k": len(cols) - 1}
+        _, indices, subspaces, _ = stumpy.mmotifs(T, P, I, max_motifs=self.n_patterns, max_matches=self.max_matches, **kw)
+        mask, dims = [], []
+        for starts, sub in zip(indices, subspaces):
+            row = np.zeros(len(X))
+            for st in np.asarray(starts):
+                if st >= 0:
+                    row[st : st + self.wlen] = 1
+            mask.append(row); dims.append(tuple(int(cols[k]) for k in np.asarray(sub)))
+        self.prediction_mask_ = np.vstack(mask) if mask else np.zeros((1, len(X)))
+        self.prediction_dims_ = dims or [tuple(int(c) for c in cols)]
+        return self
+
+
+class AllDimensions:
+    """A natively multivariate backend whose motifs span every (varying) dimension."""
+
+    def __init__(self, model):
+        self.model = model
+
+    def fit(self, X):
+        cols = _varying(X)
+        self.model.fit(X[:, cols])
+        self.prediction_mask_ = np.atleast_2d(np.asarray(self.model.prediction_mask_))
+        self.prediction_dims_ = [tuple(int(c) for c in cols)] * len(self.prediction_mask_)
+        return self
+
+
+def multivariate_factories() -> dict:
+    uni = factories()
+    out = {f"{name}/per-dim": (lambda name: lambda lo, hi, **kw: PerDimension(lambda: uni[name](lo, hi, **kw)))(name)
+           for name in ["VALMOD", "PEPA", "A-PEPA", "STOMP", "LoCoMotif"]}
+    out["LoCoMotif/all-dims"] = lambda lo, hi, **kw: AllDimensions(uni["LoCoMotif"](lo, hi, **kw))
+    out["mSTAMP/all-dims"] = lambda lo, hi, **kw: MSTAMP(lo, subspace=False, **kw)
+    out["mSTAMP/subset"] = lambda lo, hi, **kw: MSTAMP(lo, subspace=True, **kw)
+    return out

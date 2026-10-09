@@ -1,0 +1,14 @@
+# Cycle-1 frozen configuration (PROJECT.md §4): Eval 0.333, rank 22/42.
+name = "U-LoCoMotif"
+[data]
+dataset = "U"
+[bank]
+backend = "LoCoMotif"
+params = { rho = 0.6 }
+source = "train"
+random_fractions = [1.0]
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "max"

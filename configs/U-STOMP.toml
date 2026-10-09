@@ -1,0 +1,14 @@
+# Simplest motif method; best mean on dev_small in WP1.
+name = "U-STOMP"
+[data]
+dataset = "U"
+[bank]
+backend = "STOMP"
+params = {}
+source = "train"
+random_fractions = [1.0]
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "max"
