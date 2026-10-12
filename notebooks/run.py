@@ -45,6 +45,8 @@ SPLITS = {
     ("M", "eval"): LISTS / "TSB-AD-M-Eva.csv",
 }
 KEEP = ["VUS-PR", "AUC-PR", "VUS-ROC", "AUC-ROC", "Standard-F1"]
+COLUMNS = ["file", "n", "dims", "period", "train", "anomaly_ratio", "variant", "status", "motifs", "occurrences",
+           *KEEP, "seconds"]  # fixed, so failure rows and scored rows always line up
 
 
 def period_of(values: np.ndarray) -> int:
@@ -131,7 +133,7 @@ def main():
             except Exception as exc:  # discovery itself failed
                 rows = [{"file": filename, "variant": v, "status": f"{type(exc).__name__}: {str(exc)[:120]}"}
                         for v in ["motif"] + [f"random{f:g}" for f in cfg.random_fractions]]
-            pd.DataFrame(rows).to_csv(out_csv, mode="a", header=not out_csv.exists(), index=False)
+            pd.DataFrame(rows).reindex(columns=COLUMNS).to_csv(out_csv, mode="a", header=not out_csv.exists(), index=False)
             shown = " ".join(f"{r['variant']}={r.get('VUS-PR', float('nan')):.3f}" for r in rows)
             print(f"[{i}/{len(files)}] {filename[:45]:45} {shown}", flush=True)
 

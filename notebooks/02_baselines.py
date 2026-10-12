@@ -70,7 +70,7 @@ def main():
     already = tuning.done_keys(out_csv)
 
     for i, filename in enumerate(files, 1):
-        if not (DATA_DIR / filename).exists():
+        if not (DATA_DIR / filename).exists() and not (DATA_DIR.with_name("TSB-AD-M") / filename).exists():
             print(f"[{i}/{len(files)}] MISSING {filename}")
             continue
         series = load_series(filename)
