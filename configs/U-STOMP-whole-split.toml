@@ -1,0 +1,15 @@
+# U-STOMP-whole with one change: split_long = true (window never longer than the max motif length)
+name = "U-STOMP-whole-split"
+[data]
+dataset = "U"
+[bank]
+backend = "STOMP"
+params = {}
+source = "whole"
+random_fractions = [1.0]
+split_long = true
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "max"

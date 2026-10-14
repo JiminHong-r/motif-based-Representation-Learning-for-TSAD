@@ -11,6 +11,7 @@
     segment_len = 8000              # discovery runs on segments of this length
     wlen_floor = 16                 # motif length = max(floor, period) .. factor x that
     wlen_factor = 2.0
+    split_long = false              # cut merged runs longer than the max motif length into motif-length pieces
     [distance]                      # step 2: compare windows with the bank
     norm = "centred"                # "shape" (z-norm) | "centred" (mean removed) | "raw"
     [score]                         # step 3: distances -> anomaly score
@@ -40,6 +41,7 @@ class Config:
     segment_len: int = 8000
     wlen_floor: int = 16
     wlen_factor: float = 2.0
+    split_long: bool = False
     norm: str = "centred"
     scorer: str = "nearest"
     point: str = "max"

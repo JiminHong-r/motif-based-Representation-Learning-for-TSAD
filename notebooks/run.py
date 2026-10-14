@@ -32,7 +32,7 @@ from backends import factories, multivariate_factories  # noqa: E402
 from config import Config  # noqa: E402
 from data import load_series  # noqa: E402
 from pipeline import discover_cached, pooled_occurrences, shuffle_mask, window_bounds  # noqa: E402
-from representation import motif_features, window_to_points  # noqa: E402
+from representation import motif_features, split_long, window_to_points  # noqa: E402
 from scoring import evaluate, minmax  # noqa: E402
 
 LISTS = ROOT / "external" / "TSB-AD" / "Datasets" / "File_List"
@@ -93,6 +93,8 @@ def run_series(cfg: Config, filename: str, make_model) -> list[dict]:
         try:
             rng = np.random.default_rng(cfg.seed)
             occ = pooled_occurrences(segments, None if fraction is None else lambda m: shuffle_mask(m, rng, fraction))
+            if cfg.split_long:
+                occ = split_long(occ, bounds[1])
             features, wlen = motif_features(values, occ, cfg.norm)
             window = bank_scores(features, occ, n_train - wlen + 1, cfg.scorer)
             score = minmax(window_to_points(window, len(values), wlen, cfg.point))

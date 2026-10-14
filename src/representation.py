@@ -164,6 +164,24 @@ def uncovered_fraction(signal: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return 1.0 - np.convolve(covered, np.ones(wlen) / wlen, mode="same")
 
 
+def split_long(occurrences: list, max_len: int) -> list:
+    """Cut occurrences longer than `max_len` into consecutive pieces of the median length.
+
+    Overlapping occurrences of one motif arrive merged into one long run (masks
+    cannot keep them apart); without this the bank's window grows to several
+    motif lengths and dilutes short anomalies.
+    """
+    lengths = [o[2] - o[1] + 1 for o in occurrences]
+    wlen = int(min(np.median(lengths), max_len)) if occurrences else max_len
+    out = []
+    for o, length in zip(occurrences, lengths):
+        if length <= max_len:
+            out.append(o)
+        else:
+            out += [(o[0], st, st + wlen - 1, *o[3:]) for st in range(o[1], o[2] - wlen + 2, wlen)]
+    return out
+
+
 def motif_features(signal: np.ndarray, occurrences: list, norm: str = "centred", budget: float = 2e7):
     """Per-motif distances for every window; univariate or multivariate.
 
