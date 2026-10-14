@@ -1,0 +1,14 @@
+# U-STOMP with one change: point = "centre" (score of the centred window)
+name = "U-STOMP-centre"
+[data]
+dataset = "U"
+[bank]
+backend = "STOMP"
+params = {}
+source = "train"
+random_fractions = [1.0]
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "centre"

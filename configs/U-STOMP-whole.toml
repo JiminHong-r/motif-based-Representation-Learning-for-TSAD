@@ -1,0 +1,14 @@
+# U-STOMP with one change: source = "whole" (bank from the whole series)
+name = "U-STOMP-whole"
+[data]
+dataset = "U"
+[bank]
+backend = "STOMP"
+params = {}
+source = "whole"
+random_fractions = [1.0]
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "max"

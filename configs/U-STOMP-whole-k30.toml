@@ -1,0 +1,14 @@
+# U-STOMP-whole with one change: n_patterns = 30 (bank size; default 10)
+name = "U-STOMP-whole-k30"
+[data]
+dataset = "U"
+[bank]
+backend = "STOMP"
+params = { n_patterns = 30 }
+source = "whole"
+random_fractions = [1.0]
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "max"

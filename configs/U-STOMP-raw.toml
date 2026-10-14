@@ -1,0 +1,14 @@
+# U-STOMP with one change: norm = "raw" (no normalisation)
+name = "U-STOMP-raw"
+[data]
+dataset = "U"
+[bank]
+backend = "STOMP"
+params = {}
+source = "train"
+random_fractions = [1.0]
+[distance]
+norm = "raw"
+[score]
+scorer = "nearest"
+point = "max"
