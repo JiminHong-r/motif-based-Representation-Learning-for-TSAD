@@ -29,7 +29,7 @@ Advisor-confirmed: these RQs are a guide, not a fixed contract. Pivoting within 
 | Dataset + anomaly ground truth | TSB-AD (git submodule `external/TSB-AD`, installed editable; data in `data/TSB-AD-U/`, from thedatum.org) | Submodule rather than PyPI because `Datasets/File_List/` (the Tuning/Eval split) is not in the wheel. **Do not use `tsmd`'s own bundled datasets** — they have motif ground truth but no anomaly labels. |
 | Window length | TSB-AD's `find_length_rank(rank=1)` | Period estimate per series. Sets both the motif window and the metric's `slidingWindow`, as in TSB-AD's own benchmark script. |
 | Downstream evaluation metric | TSB-AD's `get_metrics()` | VUS-PR is the headline metric. |
-| Multivariate subset motifs | SubTSMD (submodule `external/SubTSMD`, installed editable) | Public since publication (github.com/ML-KULeuven/SubTSMD). Uses the removed alias `numba.bool`; `backends.SubTSMDBank` restores it. |
+| Multivariate subset motifs | SubTSMD, inside `tsmd` (merged Oct 2026, TSMD submodule at 5c994b7) | Takes any univariate `tsmd` method per dimension; Louis recommends LoCoMotif and PEPA, univariate-style parameters, SubTSMD defaults (delta=0.5, average linkage). `backends.Subspace`. |
 
 **Environment:** Python **3.12** is required — TSB-AD pins `numpy<2.0`, and numpy 1.26.4 has no Python 3.13 wheels. `python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt`.
 
@@ -135,6 +135,12 @@ Cycle 1 (Sept) built the pipeline, froze one configuration and ran Eval once: 0.
 | 5 — Write-up | method + setup now, results after Eval | Started |
 | Cycle 2 | dev set of 520 series; RQ1–RQ3 work packages; final Eval | §5, Oct 2026 – Feb 2027 |
 
+## 7b. Supervisor answers (Louis, 2026-10-14)
+
+- **NormA:** email Paul Boniol (boniol.paul@gmail.com) for the password, say it is for NormA in the thesis, CC Louis.
+- **Compute:** the Flemish Supercomputer Center (VSC), account via KU Leuven; starting credits should suffice without GPUs, more available if needed.
+- **SubTSMD:** use LoCoMotif and PEPA as the univariate methods; their parameters as in the univariate case (maybe a small sensitivity analysis); SubTSMD defaults (delta=0.5, average linkage) are fine and matter little. SubTSMD is now in the TSMD toolbox, so any TSMD method can be used inside it.
+
 ## 8. Open decisions to raise with the supervisor
 
 - **Periodic vs. non-periodic.** Motifs win clearly on non-periodic series and lose on periodic ones (§6). Accept as a stated boundary, or worth investigating further (§5 Step 1)?
@@ -173,7 +179,7 @@ Every experiment is one TOML file in `configs/`; `src/config.py` lists every set
 - **Pipeline per series:** period (TSB-AD `find_length_rank`, first dimension) → bank: motif discovery on the training part (cached in `results/masks_<source>/<bank label>/`) → per-motif distance of every window (each dimension normalised separately; only the motif's dimensions; no self-matches) → scorer → window-to-point aggregation → min-max → VUS-PR. Each config also runs its random bank(s).
 - **Settings:** dataset (U/M); bank: backend, backend params, source (train/whole), random_fractions, segment_len, motif-length rule; distance: norm; score: scorer, point; eval: failure_value.
 - **Splits:** U — tuning 48, dev_small 150, dev 520, eval 350; M — tuning 20, eval 180 (TSB-AD-M has no other series, so M is developed on its 20 Tuning series only — keep M variants few).
-- **Multivariate banks (`backends.multivariate_factories`):** per dimension (VALMOD, PEPA, A-PEPA, STOMP, LoCoMotif run on each dimension), all dimensions (LoCoMotif multivariate, mSTAMP), subset of dimensions (mSTAMP k-dimensional motifs, subspace chosen by MDL). SubTSMD added (`SubTSMD/subset`). Candidate still to add: LAMA/leitmotifs (PyPI `leitmotif`).
+- **Multivariate banks (`backends.multivariate_factories`):** per dimension (VALMOD, PEPA, A-PEPA, STOMP, LoCoMotif run on each dimension), all dimensions (LoCoMotif multivariate, mSTAMP), subset of dimensions (mSTAMP k-dimensional motifs, subspace chosen by MDL). SubTSMD added via `tsmd` (`SubTSMD[LoCoMotif]/subset`, `SubTSMD[PEPA]/subset`). Candidate still to add: LAMA/leitmotifs (PyPI `leitmotif`).
 - **Comparison:** `compare.py` on Eval adds TSB-AD's published per-series VUS-PR (U: 41 detectors, M: 31) — the final methods × VUS-PR plot.
 - Check: the runner reproduces the cycle-1 numbers exactly (`U-LoCoMotif` on dev_small).
 

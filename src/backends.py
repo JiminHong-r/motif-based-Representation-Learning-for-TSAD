@@ -24,8 +24,9 @@ Multivariate (TSB-AD-M), three ways to get a motif bank — `MULTIVARIATE`:
   multivariate mode; mSTAMP with all dimensions);
 * subset of dimensions: each motif lives in the dimensions the method selects
   (mSTAMP k-dimensional motifs, Yeh et al. 2017, subspace chosen by MDL;
-  SubTSMD, Carpentier et al. 2026: LoCoMotif per dimension, then motifs combined
-  bottom-up into subspace motifs, allowing small time shifts between dimensions).
+  SubTSMD, Carpentier et al. 2026, in TSMD: a univariate method — LoCoMotif or
+  PEPA, as Louis recommends — per dimension, then motifs combined bottom-up into
+  subspace motifs, allowing small time shifts between dimensions).
 
 Multivariate backends also set `.prediction_dims_`: one tuple of column
 indices per mask row. Constant columns are dropped before discovery.
@@ -170,34 +171,44 @@ class AllDimensions:
         return self
 
 
-class SubTSMDBank:
-    """SubTSMD (external/SubTSMD, package defaults) as a bank.
+class _NeverFails:
+    """A univariate backend whose failure on one dimension yields no motifs instead of an error."""
 
-    SubTSMD lets a motif's dimensions be slightly shifted in time; the bank
-    stores one span per occurrence, so each occurrence keeps the span covering
-    all its dimensions.
+    def __init__(self, model):
+        self.model = model
+
+    def fit(self, signal):
+        try:
+            self.model.fit(signal)
+            self.prediction_mask_ = np.atleast_2d(np.asarray(self.model.prediction_mask_))
+        except Exception:
+            self.prediction_mask_ = np.zeros((1, len(signal)))
+        return self
+
+
+class Subspace:
+    """TSMD's SubTSMD (Carpentier et al. 2026) over a univariate backend: motifs on subsets of dimensions.
+
+    SubTSMD lets a motif's dimensions be slightly shifted in time; its
+    prediction_mask_ (used here) keeps one span per occurrence covering all of them.
     """
 
-    def __init__(self, l_min: int, l_max: int, **kwargs):
-        self.l_min, self.l_max, self.kwargs = l_min, l_max, kwargs
+    def __init__(self, univariate, delta: float = 0.5, linkage: str = "average"):
+        self.univariate, self.delta, self.linkage = univariate, delta, linkage
 
     def fit(self, X):
-        import numba
-
-        if not hasattr(numba, "bool"):  # SubTSMD uses the alias numba.bool, removed in newer numba
-            numba.bool = numba.boolean
-        from sub_tsmd import SubTSMD
+        from tsmd.competitors.subtsmd import SubTSMD
 
         cols = _varying(X)
-        motif_sets = SubTSMD(l_min=self.l_min, l_max=self.l_max, **self.kwargs).apply(X[:, cols])
-        mask, dims = [], []
-        for motif_set in motif_sets:
-            row = np.zeros(len(X))
-            for motif in motif_set:
-                row[int(motif.start()) : int(motif.end()) + 1] = 1
-            mask.append(row); dims.append(tuple(int(cols[k]) for k in np.flatnonzero(motif_set.mask)))
-        self.prediction_mask_ = np.vstack(mask) if mask else np.zeros((1, len(X)))
-        self.prediction_dims_ = dims or [tuple(int(c) for c in cols)]
+        model = SubTSMD(_NeverFails(self.univariate), delta=self.delta, linkage=self.linkage)
+        model.fit(X[:, cols])
+        return self._read(model, cols, len(X))
+
+    def _read(self, model, cols, n):
+        mask = np.atleast_2d(np.asarray(model.prediction_mask_))
+        subspaces = np.atleast_2d(np.asarray(model.subspaces_, dtype=bool)) if len(mask) else np.zeros((0, len(cols)), bool)
+        self.prediction_mask_ = mask if len(mask) else np.zeros((1, n))
+        self.prediction_dims_ = [tuple(int(cols[k]) for k in np.flatnonzero(row)) for row in subspaces] or [tuple(int(c) for c in cols)]
         return self
 
 
@@ -208,5 +219,7 @@ def multivariate_factories() -> dict:
     out["LoCoMotif/all-dims"] = lambda lo, hi, **kw: AllDimensions(uni["LoCoMotif"](lo, hi, **kw))
     out["mSTAMP/all-dims"] = lambda lo, hi, **kw: MSTAMP(lo, subspace=False, **kw)
     out["mSTAMP/subset"] = lambda lo, hi, **kw: MSTAMP(lo, subspace=True, **kw)
-    out["SubTSMD/subset"] = lambda lo, hi, **kw: SubTSMDBank(lo, hi, **kw)
+    for name in ["LoCoMotif", "PEPA"]:  # Louis: LoCoMotif and PEPA as the univariate methods inside SubTSMD
+        out[f"SubTSMD[{name}]/subset"] = (lambda name: lambda lo, hi, delta=0.5, linkage="average", **kw:
+                                          Subspace(uni[name](lo, hi, **kw), delta, linkage))(name)
     return out

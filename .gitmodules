@@ -4,6 +4,3 @@
 [submodule "external/TSB-AD"]
 	path = external/TSB-AD
 	url = https://github.com/TheDatumOrg/TSB-AD.git
-[submodule "external/SubTSMD"]
-	path = external/SubTSMD
-	url = https://github.com/ML-KULeuven/SubTSMD

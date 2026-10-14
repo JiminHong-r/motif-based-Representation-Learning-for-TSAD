@@ -1,0 +1,14 @@
+# Sensitivity: M-SubTSMD-LoCoMotif with LoCoMotif default rho=0.8
+name = "M-SubTSMD-LoCoMotif-rho0.8"
+[data]
+dataset = "M"
+[bank]
+backend = "SubTSMD[LoCoMotif]/subset"
+params = { rho = 0.8 }
+source = "train"
+random_fractions = [1.0]
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "max"

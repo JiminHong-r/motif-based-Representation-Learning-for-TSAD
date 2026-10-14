@@ -1,9 +1,9 @@
-# SubTSMD (Carpentier et al. 2026): LoCoMotif per dimension, combined into subspace motifs
-name = "M-SubTSMD-subset"
+# SubTSMD (TSMD) with PEPA per dimension, PEPA and SubTSMD defaults (Louis, 2026-10-14)
+name = "M-SubTSMD-PEPA"
 [data]
 dataset = "M"
 [bank]
-backend = "SubTSMD/subset"
+backend = "SubTSMD[PEPA]/subset"
 params = {}
 source = "train"
 random_fractions = [1.0]
