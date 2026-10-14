@@ -1,0 +1,14 @@
+# SubTSMD (Carpentier et al. 2026): LoCoMotif per dimension, combined into subspace motifs
+name = "M-SubTSMD-subset"
+[data]
+dataset = "M"
+[bank]
+backend = "SubTSMD/subset"
+params = {}
+source = "train"
+random_fractions = [1.0]
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "max"

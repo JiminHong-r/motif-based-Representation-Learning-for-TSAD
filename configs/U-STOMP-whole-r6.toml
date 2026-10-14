@@ -1,0 +1,14 @@
+# U-STOMP-whole with one change: radius_ratio = 6 (occurrences up to 6 x the closest-pair distance; default 3) — bank size
+name = "U-STOMP-whole-r6"
+[data]
+dataset = "U"
+[bank]
+backend = "STOMP"
+params = { radius_ratio = 6 }
+source = "whole"
+random_fractions = [1.0]
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "max"

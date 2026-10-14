@@ -29,7 +29,7 @@ Advisor-confirmed: these RQs are a guide, not a fixed contract. Pivoting within 
 | Dataset + anomaly ground truth | TSB-AD (git submodule `external/TSB-AD`, installed editable; data in `data/TSB-AD-U/`, from thedatum.org) | Submodule rather than PyPI because `Datasets/File_List/` (the Tuning/Eval split) is not in the wheel. **Do not use `tsmd`'s own bundled datasets** — they have motif ground truth but no anomaly labels. |
 | Window length | TSB-AD's `find_length_rank(rank=1)` | Period estimate per series. Sets both the motif window and the metric's `slidingWindow`, as in TSB-AD's own benchmark script. |
 | Downstream evaluation metric | TSB-AD's `get_metrics()` | VUS-PR is the headline metric. |
-| Long-lead / pending | SubTSMD | No public repo as of now. Email sent to KU Leuven authors — optional bonus backend, not a blocker. |
+| Multivariate subset motifs | SubTSMD (submodule `external/SubTSMD`, installed editable) | Public since publication (github.com/ML-KULeuven/SubTSMD). Uses the removed alias `numba.bool`; `backends.SubTSMDBank` restores it. |
 
 **Environment:** Python **3.12** is required — TSB-AD pins `numpy<2.0`, and numpy 1.26.4 has no Python 3.13 wheels. `python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt`.
 
@@ -173,7 +173,7 @@ Every experiment is one TOML file in `configs/`; `src/config.py` lists every set
 - **Pipeline per series:** period (TSB-AD `find_length_rank`, first dimension) → bank: motif discovery on the training part (cached in `results/masks_<source>/<bank label>/`) → per-motif distance of every window (each dimension normalised separately; only the motif's dimensions; no self-matches) → scorer → window-to-point aggregation → min-max → VUS-PR. Each config also runs its random bank(s).
 - **Settings:** dataset (U/M); bank: backend, backend params, source (train/whole), random_fractions, segment_len, motif-length rule; distance: norm; score: scorer, point; eval: failure_value.
 - **Splits:** U — tuning 48, dev_small 150, dev 520, eval 350; M — tuning 20, eval 180 (TSB-AD-M has no other series, so M is developed on its 20 Tuning series only — keep M variants few).
-- **Multivariate banks (`backends.multivariate_factories`):** per dimension (VALMOD, PEPA, A-PEPA, STOMP, LoCoMotif run on each dimension), all dimensions (LoCoMotif multivariate, mSTAMP), subset of dimensions (mSTAMP k-dimensional motifs, subspace chosen by MDL). Candidates still to add: LAMA/leitmotifs (PyPI `leitmotif`), SubTSMD (no public code).
+- **Multivariate banks (`backends.multivariate_factories`):** per dimension (VALMOD, PEPA, A-PEPA, STOMP, LoCoMotif run on each dimension), all dimensions (LoCoMotif multivariate, mSTAMP), subset of dimensions (mSTAMP k-dimensional motifs, subspace chosen by MDL). SubTSMD added (`SubTSMD/subset`). Candidate still to add: LAMA/leitmotifs (PyPI `leitmotif`).
 - **Comparison:** `compare.py` on Eval adds TSB-AD's published per-series VUS-PR (U: 41 detectors, M: 31) — the final methods × VUS-PR plot.
 - Check: the runner reproduces the cycle-1 numbers exactly (`U-LoCoMotif` on dev_small).
 
@@ -183,4 +183,4 @@ Every experiment is one TOML file in `configs/`; `src/config.py` lists every set
 - TSMD backends: Motiflets (Schäfer & Leser, VLDB 2022); LoCoMotif (Van Wesenbeeck et al., DMKD 2024); LAMA/leitmotifs (Schäfer & Leser, VLDB 2025); Guerrini et al., *TSMD: A Comprehensive Evaluation* (VLDB 2025) — source of the `tsmd` package
 - Normal-pattern-library detectors (baselines): NORMA, SAND, Series2Graph, KShapeAD — see TSB-AD's model list for the original papers
 - Reference-bank baselines from Louis (2026-09-30): NormA (Boniol et al., VLDB J 2021, doi:10.1007/s00778-021-00655-8); PBAD (Feremans et al., ECML PKDD 2019, doi:10.1007/978-3-030-46150-8_15)
-- Pending: SubTSMD (Carpentier et al., DMKD 2026) — no public repo yet, KU Leuven contact in progress.
+- SubTSMD (Carpentier et al., DMKD 2026, doi:10.1007/s10618-026-01218-7) — code: github.com/ML-KULeuven/SubTSMD

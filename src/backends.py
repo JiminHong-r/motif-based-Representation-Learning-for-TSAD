@@ -23,7 +23,9 @@ Multivariate (TSB-AD-M), three ways to get a motif bank — `MULTIVARIATE`:
 * all dimensions: one motif spans every dimension (LoCoMotif's native
   multivariate mode; mSTAMP with all dimensions);
 * subset of dimensions: each motif lives in the dimensions the method selects
-  (mSTAMP k-dimensional motifs, Yeh et al. 2017, subspace chosen by MDL).
+  (mSTAMP k-dimensional motifs, Yeh et al. 2017, subspace chosen by MDL;
+  SubTSMD, Carpentier et al. 2026: LoCoMotif per dimension, then motifs combined
+  bottom-up into subspace motifs, allowing small time shifts between dimensions).
 
 Multivariate backends also set `.prediction_dims_`: one tuple of column
 indices per mask row. Constant columns are dropped before discovery.
@@ -168,6 +170,37 @@ class AllDimensions:
         return self
 
 
+class SubTSMDBank:
+    """SubTSMD (external/SubTSMD, package defaults) as a bank.
+
+    SubTSMD lets a motif's dimensions be slightly shifted in time; the bank
+    stores one span per occurrence, so each occurrence keeps the span covering
+    all its dimensions.
+    """
+
+    def __init__(self, l_min: int, l_max: int, **kwargs):
+        self.l_min, self.l_max, self.kwargs = l_min, l_max, kwargs
+
+    def fit(self, X):
+        import numba
+
+        if not hasattr(numba, "bool"):  # SubTSMD uses the alias numba.bool, removed in newer numba
+            numba.bool = numba.boolean
+        from sub_tsmd import SubTSMD
+
+        cols = _varying(X)
+        motif_sets = SubTSMD(l_min=self.l_min, l_max=self.l_max, **self.kwargs).apply(X[:, cols])
+        mask, dims = [], []
+        for motif_set in motif_sets:
+            row = np.zeros(len(X))
+            for motif in motif_set:
+                row[int(motif.start()) : int(motif.end()) + 1] = 1
+            mask.append(row); dims.append(tuple(int(cols[k]) for k in np.flatnonzero(motif_set.mask)))
+        self.prediction_mask_ = np.vstack(mask) if mask else np.zeros((1, len(X)))
+        self.prediction_dims_ = dims or [tuple(int(c) for c in cols)]
+        return self
+
+
 def multivariate_factories() -> dict:
     uni = factories()
     out = {f"{name}/per-dim": (lambda name: lambda lo, hi, **kw: PerDimension(lambda: uni[name](lo, hi, **kw)))(name)
@@ -175,4 +208,5 @@ def multivariate_factories() -> dict:
     out["LoCoMotif/all-dims"] = lambda lo, hi, **kw: AllDimensions(uni["LoCoMotif"](lo, hi, **kw))
     out["mSTAMP/all-dims"] = lambda lo, hi, **kw: MSTAMP(lo, subspace=False, **kw)
     out["mSTAMP/subset"] = lambda lo, hi, **kw: MSTAMP(lo, subspace=True, **kw)
+    out["SubTSMD/subset"] = lambda lo, hi, **kw: SubTSMDBank(lo, hi, **kw)
     return out
