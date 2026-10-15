@@ -1,0 +1,15 @@
+# U-STOMP-whole-r15 with one change: shift = 0.5 (each occurrence also at every shift up to half its length: all phases)
+name = "U-STOMP-whole-r15-shift"
+[data]
+dataset = "U"
+[bank]
+backend = "STOMP"
+params = { radius_ratio = 1.5 }
+source = "whole"
+random_fractions = [1.0]
+shift = 0.5
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "max"

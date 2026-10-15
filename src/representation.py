@@ -182,6 +182,24 @@ def split_long(occurrences: list, max_len: int) -> list:
     return out
 
 
+def add_shifts(occurrences: list, fraction: float, n: int) -> list:
+    """Phase-complete bank: each occurrence also enters shifted by up to ±fraction x its length.
+
+    A bank holding a periodic pattern at only a few phases makes normal windows
+    at other phases look far (the periodic weakness in PROJECT.md §6); the
+    shifted copies are real windows of the series around each occurrence,
+    so every phase is represented — what MatrixProfile and k-Shape's
+    shift-invariant distance get for free.
+    """
+    out = []
+    for o in occurrences:
+        length = o[2] - o[1] + 1
+        reach = int(fraction * length)
+        out += [(o[0], o[1] + d, o[2] + d, *o[3:]) for d in range(-reach, reach + 1)
+                if o[1] + d >= 0 and o[2] + d < n]
+    return out
+
+
 def motif_features(signal: np.ndarray, occurrences: list, norm: str = "centred", budget: float = 2e7):
     """Per-motif distances for every window; univariate or multivariate.
 

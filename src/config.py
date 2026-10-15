@@ -12,6 +12,7 @@
     wlen_floor = 16                 # motif length = max(floor, period) .. factor x that
     wlen_factor = 2.0
     split_long = false              # cut merged runs longer than the max motif length into motif-length pieces
+    shift = 0.0                     # add each occurrence shifted by up to ±shift x its length (all phases in the bank)
     [distance]                      # step 2: compare windows with the bank
     norm = "centred"                # "shape" (z-norm) | "centred" (mean removed) | "raw"
     [score]                         # step 3: distances -> anomaly score
@@ -42,6 +43,7 @@ class Config:
     wlen_floor: int = 16
     wlen_factor: float = 2.0
     split_long: bool = False
+    shift: float = 0.0
     norm: str = "centred"
     scorer: str = "nearest"
     point: str = "max"
