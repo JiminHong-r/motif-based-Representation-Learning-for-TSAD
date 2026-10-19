@@ -1,0 +1,83 @@
+diff --git a/src/utils/make_features.py b/src/utils/make_features.py
+index 6e33282..76be6f8 100644
+--- a/src/utils/make_features.py
++++ b/src/utils/make_features.py
+@@ -20,6 +20,13 @@ except ImportError:
+ # MAKE PATTERN-BASED FEATURES
+ ################################################################################
+ 
++
++def _ragged(xs):  # NumPy >= 1.24 refuses ragged np.array(list); keep a 1-D object array of arrays
++    out = np.empty(len(xs), dtype=object)
++    for i, x in enumerate(xs):
++        out[i] = x
++    return out
++
+ def make_pattern_based_features(data, patterns, par_lambda=2, distance_formula=1, pattern_type='itemset', data_type='continuous'):
+     """ Make the pattern-based features.
+         --> utilizes underlying cython code to speed up
+@@ -64,7 +71,7 @@ def make_pattern_based_features(data, patterns, par_lambda=2, distance_formula=1
+             data = np.sort(data, axis=1)
+             for i, p in enumerate(patterns):
+                 patterns[i] = np.sort(p)
+-        features = cpm.make_pattern_based_features_cython(data, np.array(patterns), n, npa, par_lambda, distance_formula)
++        features = cpm.make_pattern_based_features_cython(data, _ragged(patterns), n, npa, par_lambda, distance_formula)
+ 
+     else:  # logs
+         n = len(data)
+diff --git a/src/utils/pattern_mining_spmf.py b/src/utils/pattern_mining_spmf.py
+index d1730d7..983f6ab 100644
+--- a/src/utils/pattern_mining_spmf.py
++++ b/src/utils/pattern_mining_spmf.py
+@@ -43,6 +43,13 @@ def mine_closed_itemsets(data, relative_minsup, TEMP_DIR):
+     # return the patterns
+     return patterns, supports
+ 
++
++def _ragged(xs):  # NumPy >= 1.24 refuses ragged np.array(list); keep a 1-D object array of arrays
++    out = np.empty(len(xs), dtype=object)
++    for i, x in enumerate(xs):
++        out[i] = x
++    return out
++
+ #Len: new 25/04/2019
+ def mine_rare_itemsets(data, relative_minsup, TEMP_DIR):
+     """ Mine rare or minimal infrequent itemsets """
+@@ -70,6 +77,8 @@ def mine_maximal_itemsets(data, relative_minsup, TEMP_DIR):
+     # return the patterns
+     return patterns, supports
+ 
++
++
+ #Len: new 25/04/2019
+ #Remark: CM-ClaSP can not handle REPEATING items in sequential patterns! See test_pattern_mining_spmf
+ def mine_closed_sequential_patterns(data, relative_minsup, TEMP_DIR):
+@@ -214,7 +223,9 @@ def _parse_itemset_patterns(spmf_lines):
+         new_p = np.array(line.split('#SUP:')[0].strip(' ').split(' ')).astype(int)
+         patterns.append(new_p)
+         supports.append(new_s)
+-    return _sort_on_support(np.array(patterns), np.array(supports))
++    return _sort_on_support(_ragged(patterns), np.array(supports))
++
++
+ 
+ #Len: new 25/04/2019
+ def _sort_on_support(patterns,supports):
+@@ -238,7 +249,7 @@ def _parse_sequential_patterns(spmf_lines):
+         patterns.append(new_p)
+         supports.append(new_s)
+     # patterns are not sorted!
+-    return _sort_on_support(np.array(patterns), np.array(supports))
++    return _sort_on_support(_ragged(patterns), np.array(supports))
+ 
+ 
+ def data_encode_as_int(data):
+@@ -281,7 +292,7 @@ def patterns_decode_from_int(patterns, decode_dct):
+     decoded_patterns = []
+     for p in patterns:
+         decoded_patterns.append(vectorize_func(p))
+-    return np.array(decoded_patterns)
++    return _ragged(decoded_patterns)
+ 
+ 
+ def make_temp_dir():

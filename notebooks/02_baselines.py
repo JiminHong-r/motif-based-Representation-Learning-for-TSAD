@@ -36,7 +36,47 @@ OUT_CSV = ROOT / "results" / "baseline_metrics.csv"
 DETECTORS = ["MatrixProfile", "KShapeAD", "Series2Graph", "KMeansAD_U", "SAND", "NORMA", "Sub_PCA"]
 
 
-def run_detector(name: str, filename: str, values: np.ndarray) -> np.ndarray:
+def run_pbad(values: np.ndarray, period: int) -> np.ndarray:
+    """PBAD (Feremans et al. 2019), authors' code in external/PBAD (+ patches/pbad-numpy.patch), README defaults.
+
+    Unsupervised on the whole series. Each window spans one period, binned
+    (PBAD's moving-average `bin_size`) to ~12 bins as in the README, stride 1 bin:
+    unbinned 158-point windows make SPMF's MaxSP run for hours, and a stride of
+    half a window leaves so few windows that minsup 1% is an absolute support of 1.
+    Each point gets the max score of the windows covering it (PBAD labels a
+    window anomalous if any of its points is).
+    """
+    import contextlib, io, os
+    os.environ["PATH"] = "/opt/homebrew/opt/openjdk/bin:" + os.environ["PATH"]  # SPMF runs `java -jar`
+    sys.path.insert(0, str(ROOT / "external" / "PBAD" / "src"))
+    from methods.PBAD import PBAD
+    from methods.PreProcessor import PreProcessor
+
+    data = values.reshape(-1, 1) if values.ndim == 1 else values
+    n = len(data)
+    bin_size = -(-period // 12)
+    bins = -(-period // bin_size)  # window length in bins
+    with contextlib.redirect_stdout(io.StringIO()):  # PBAD prints debug lines per mining call
+        w_disc, w, _, _ = PreProcessor(window_size=bins, window_incr=1, bin_size=bin_size, alphabet_size=30,
+                                       verbose=False).preprocess(
+            continuous_series={d: data[:, d].astype(np.float64) for d in range(data.shape[1])},
+            labels=np.zeros(n), return_undiscretized=True)
+        try:
+            win = PBAD(relative_minsup=0.01, jaccard_threshold=0.9, pattern_type="all",
+                       pattern_pruning="maximal", verbose=False).fit_predict(w, w_disc)
+        except ValueError:  # no usable features; the authors' fix (PBAD.fit comment): closed patterns
+            win = PBAD(relative_minsup=0.01, jaccard_threshold=0.9, pattern_type="all",
+                       pattern_pruning="closed", verbose=False).fit_predict(w, w_disc)
+    score = np.zeros(n)
+    for i, s in enumerate(win):
+        seg = score[i * bin_size:(i + bins) * bin_size]
+        np.maximum(seg, s, out=seg)
+    return score
+
+
+def run_detector(name: str, filename: str, values: np.ndarray, period: int = 0) -> np.ndarray:
+    if name == "PBAD":
+        return run_pbad(values, period)
     from TSB_AD import model_wrapper as mw
     from TSB_AD.HP_list import Optimal_Multi_algo_HP_dict, Optimal_Uni_algo_HP_dict
 
@@ -86,7 +126,7 @@ def main():
                    "anomaly_ratio": float(series.labels.mean())}
             start = time.perf_counter()
             try:
-                score = run_detector(name, filename, series.values)
+                score = run_detector(name, filename, series.values, period)
                 if len(score) != n:
                     raise ValueError(f"score length {len(score)} != {n}")
                 metrics = evaluate(minmax(score), series.labels, period)
