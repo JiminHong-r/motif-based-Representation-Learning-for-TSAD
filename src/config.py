@@ -17,7 +17,7 @@
     norm = "centred"                # "shape" (z-norm) | "centred" (mean removed) | "raw"
     [score]                         # step 3: distances -> anomaly score
     scorer = "nearest"              # "nearest" | "weighted" (NormA-style) | "iforest"
-    point = "max"                   # window -> point: "max" | "centre" | "min"
+    point = "max"                   # window -> point: "max" | "mean" | "centre" | "min"
     [eval]
     failure_value = 0.0             # VUS-PR of a series that cannot be scored (TSB-AD convention)
 

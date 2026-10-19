@@ -73,6 +73,19 @@ def bank_scores(features: np.ndarray, occurrences: list, n_train_windows: int, s
     raise ValueError(f"unknown scorer {scorer!r}")
 
 
+def variant_score(cfg: Config, values: np.ndarray, segments: list, n_train: int, bounds, fraction=None):
+    """Bank (motifs, or a random bank when `fraction` is set) -> per-point score in [0, 1]."""
+    rng = np.random.default_rng(cfg.seed)
+    occ = pooled_occurrences(segments, None if fraction is None else lambda m: shuffle_mask(m, rng, fraction))
+    if cfg.split_long:
+        occ = split_long(occ, bounds[1])
+    if cfg.shift:
+        occ = add_shifts(occ, cfg.shift, len(values))
+    features, wlen = motif_features(values, occ, cfg.norm)
+    window = bank_scores(features, occ, n_train - wlen + 1, cfg.scorer)
+    return minmax(window_to_points(window, len(values), wlen, cfg.point)), occ
+
+
 def run_series(cfg: Config, filename: str, make_model) -> list[dict]:
     series = load_series(filename)
     values = series.values
@@ -91,15 +104,7 @@ def run_series(cfg: Config, filename: str, make_model) -> list[dict]:
     for variant, fraction in [("motif", None)] + [(f"random{f:g}", f) for f in cfg.random_fractions]:
         start = time.perf_counter()
         try:
-            rng = np.random.default_rng(cfg.seed)
-            occ = pooled_occurrences(segments, None if fraction is None else lambda m: shuffle_mask(m, rng, fraction))
-            if cfg.split_long:
-                occ = split_long(occ, bounds[1])
-            if cfg.shift:
-                occ = add_shifts(occ, cfg.shift, len(values))
-            features, wlen = motif_features(values, occ, cfg.norm)
-            window = bank_scores(features, occ, n_train - wlen + 1, cfg.scorer)
-            score = minmax(window_to_points(window, len(values), wlen, cfg.point))
+            score, occ = variant_score(cfg, values, segments, n_train, bounds, fraction)
             metrics = evaluate(score, series.labels, period)
             row = {**base, "variant": variant, "status": "ok", "motifs": len({o[0] for o in occ}),
                    "occurrences": len(occ), **{k: metrics.get(k, np.nan) for k in KEEP}}

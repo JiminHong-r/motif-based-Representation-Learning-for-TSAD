@@ -1,5 +1,7 @@
 # Motif-Based Representation Learning for Time Series Anomaly Detection
 
+**Status as of 2026-10-19:** Cycle 2 univariate baseline: STOMP bank on the training part + mean window-to-point aggregation, **0.366** on dev_small (random bank 0.322; KShapeAD 0.349, MatrixProfile 0.333, KMeansAD 0.330) — to be confirmed on the 370 held-out dev series before freezing (§6, 2026-10-19). Next: multivariate with the same change, VSC, mid-term presentation.
+
 **Status as of 2026-10-05:** Eval done (frozen configuration, 350 series). VUS-PR **0.333** (failures as 0; 0.350 over the 333 series with motifs) — rank **22 of 42** on the TSB-AD-U leaderboard, between CNN (0.343) and LSTMAD (0.325). Random bank 0.321; motifs beat random on only 164/333 series (median difference 0.000). The Tuning result (0.378, 30/48 vs. random) did not carry over. Next: write-up around the decoupling answer, RQ3 with more backends, NormA/PBAD (§5). Cycle 2 plan (Oct–Feb) in §5.
 
 ## 1. Goal
@@ -121,6 +123,21 @@ Cycle 1 (Sept) built the pipeline, froze one configuration and ran Eval once: 0.
   - *Failures:* LatentMotif finds no motifs on 67/150; PanMP crashes on 23 (index error inside tsmd), A-PEPA on 19 (empty argmax), VALMOD 4 (attribute error), LoCoMotif and MDL-Clust 4 each (no motifs). PEPA unusable (crashes in its own code).
   - *Reading:* motif quality has a small, sometimes statistically detectable effect on dev (≤ 0.03), none detectable on Eval, and no ordering by sophistication. Decoupled in practice.
 
+- **Week of 2026-10-12 — tuning rounds on dev_small (150), STOMP bank, max aggregation:**
+  - Norm: centred 0.275 > raw 0.229 > shape 0.115 (random 0.259 / 0.222 / 0.118). Centre aggregation 0.262.
+  - Whole-series bank 0.307 (random 0.320); radius_ratio 1.5 / 2 / 6 / 12: 0.323 / 0.320 / 0.298 / 0.275, random always within ±0.01.
+  - n_patterns 10 / 30 / 100 identical (0.307): STOMP stops at 6 motifs on its own (radius_ratio=3 assigns every window), so the cap never binds.
+  - split_long 0.309 (random 0.331); phase-complete bank (shift 0.5) no gain on the 35 series it reached (0.547 vs. 0.551), run stopped.
+  - TSB-AD-M (20 Tuning): best mSTAMP all dimensions 0.386 (random 0.413); per dimension STOMP 0.305, PEPA 0.302; SubTSMD[PEPA] 0.345 (random 0.438), SubTSMD[LoCoMotif] 0.303 (rho 0.8: 0.254). Random bank ≥ motifs in every M configuration.
+  - PBAD (authors' code, README defaults, ~12 bins per period window): 0.249 on Tuning (KShapeAD 0.369).
+- **2026-10-16 meeting:** univariate 0.30–0.35 accepted as a solid baseline; move to multivariate; suggestion: Mahalanobis on the per-motif distances; mid-term presentation with a toy example.
+- **2026-10-19 — mean aggregation (each point = mean over the windows covering it, TSB-AD's usual rule):**
+  - Scorer sweep (76 dev_small series, STOMP whole r1.5): mean 0.475 vs. max 0.366; Mahalanobis 0.281, per-motif z-scored 0.370, reconstruction residual 0.29 — Mahalanobis is worse.
+  - Official runs, dev_small 150, max → mean: STOMP train 0.275 → **0.366** (random 0.322, 71 wins); LoCoMotif train 0.269 → 0.339 (random 0.308); STOMP whole r1.5 0.323 → 0.490 (random **0.507**, motifs win 46/150).
+  - Over-optimisation checks (whole r1.5): gain holds on all metrics (AUC-PR 0.20 → 0.40, F1 0.26 → 0.44), median series +0.105, +0.118 without the 10 largest gains. No-motif sanity detector (window energy = norm of the centred window) gets 0.380 with mean aggregation (0.298 with max): dev_small is easy for simple window detectors, and the whole-series 0.49 comes from the bank covering the test part, not from motif quality.
+  - Proposed baseline: STOMP, training part, mean aggregation (0.366) — the setting where motifs beat random. Whole-series 0.49 reported as a side result (random bank equal). Confirm on the 370 dev series outside dev_small before freezing; Eval only after freezing with Louis.
+  - Toy example (`notebooks/00_toy.py`): five planted anomaly types; max aggregation smears a spike over ~2 windows; a single-phase bank hides shape/frequency anomalies, a phase-complete bank (`shift`) separates all five.
+
 ## 7. Phase plan
 
 | Phase | Focus | Status |
@@ -152,6 +169,7 @@ Cycle 1 (Sept) built the pipeline, froze one configuration and ran Eval once: 0.
 ## 9. Code layout
 
 ```
+notebooks/00_toy.py             toy series with 5 planted anomalies, whole pipeline → results/toy.png
 notebooks/01_tuning_set.py      first pipeline, whole series → results/tuning_metrics.csv
 notebooks/02_baselines.py       TSB-AD baselines → results/baseline_metrics.csv
 notebooks/03_compare.py         tables for 01 + 02

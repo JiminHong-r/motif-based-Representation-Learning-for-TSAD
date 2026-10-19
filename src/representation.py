@@ -260,6 +260,9 @@ def window_to_points(window_score: np.ndarray, n: int, wlen: int, point: str = "
     if point in ("min", "max"):
         reduce = np.minimum if point == "min" else np.maximum
         return _fill_edges(_over_covering_windows(window_score, n, wlen, reduce), wlen - 1)
+    if point == "mean":  # each point: mean over the windows covering it (TSB-AD's usual window -> point rule)
+        out = np.convolve(window_score, np.ones(wlen) / wlen, mode="full")[:n]
+        return _fill_edges(out, wlen - 1)
     if point == "centre":
         half = wlen // 2
         out = np.full(n, np.median(window_score))

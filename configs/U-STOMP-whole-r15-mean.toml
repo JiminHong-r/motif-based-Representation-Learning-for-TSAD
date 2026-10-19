@@ -1,0 +1,14 @@
+# U-STOMP-whole-r15 with one change: point = "mean" (mean over covering windows instead of max)
+name = "U-STOMP-whole-r15-mean"
+[data]
+dataset = "U"
+[bank]
+backend = "STOMP"
+params = { radius_ratio = 1.5 }
+source = "whole"
+random_fractions = [1.0]
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "mean"
