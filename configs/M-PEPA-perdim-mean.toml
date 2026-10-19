@@ -1,0 +1,14 @@
+# Comparison asked for: univariate PEPA on each dimension
+name = "M-PEPA-perdim-mean"
+[data]
+dataset = "M"
+[bank]
+backend = "PEPA/per-dim"
+params = {}
+source = "train"
+random_fractions = [1.0]
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "mean"
