@@ -1,0 +1,15 @@
+# U-STOMP-mean (frozen) with train_scale = 0.5: training-length sensitivity, not a candidate.
+name = "U-STOMP-mean-train0.5"
+[data]
+dataset = "U"
+[bank]
+backend = "STOMP"
+params = {}
+source = "train"
+train_scale = 0.5
+random_fractions = [1.0]
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "mean"

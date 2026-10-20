@@ -92,7 +92,7 @@ def run_series(cfg: Config, filename: str, make_model) -> list[dict]:
     period = period_of(values)
     bounds = window_bounds(period, cfg.wlen_floor, cfg.wlen_factor)
     tr = int(Path(filename).stem.split("_")[-3])  # ..._tr_<end>_1st_<idx>
-    n_train = len(values) if cfg.source == "whole" else max(tr, 4 * bounds[0])
+    n_train = len(values) if cfg.source == "whole" else max(int(cfg.train_scale * tr), 4 * bounds[0])
     base = {"file": filename, "n": len(values), "dims": 1 if values.ndim == 1 else values.shape[1],
             "period": period, "train": n_train, "anomaly_ratio": float(series.labels.mean())}
     cache = ROOT / "results" / f"masks_{cfg.source}" / cfg.bank_label() / f"{Path(filename).stem}.pkl"

@@ -1,4 +1,4 @@
-# FROZEN cycle-2 univariate configuration (2026-10-20). STOMP bank on the training part, mean aggregation.
+# Superseded 2026-10-20 by U-STOMP-mean-split (merged occurrences). STOMP bank on the training part, mean aggregation.
 name = "U-STOMP-mean"
 [data]
 dataset = "U"

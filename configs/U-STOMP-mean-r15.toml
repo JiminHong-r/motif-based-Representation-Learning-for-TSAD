@@ -1,0 +1,14 @@
+# U-STOMP-mean (frozen) with radius_ratio = 1.5: larger bank (closer to 10 motifs), sensitivity, not a candidate.
+name = "U-STOMP-mean-r15"
+[data]
+dataset = "U"
+[bank]
+backend = "STOMP"
+params = { radius_ratio = 1.5 }
+source = "train"
+random_fractions = [1.0]
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "mean"

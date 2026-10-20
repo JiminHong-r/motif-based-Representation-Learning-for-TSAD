@@ -1,0 +1,15 @@
+# FROZEN cycle-2 univariate configuration (amended 2026-10-20: + split_long). STOMP bank on the training part, mean aggregation.
+name = "U-STOMP-mean-split"
+[data]
+dataset = "U"
+[bank]
+backend = "STOMP"
+params = {}
+source = "train"
+random_fractions = [1.0]
+split_long = true
+[distance]
+norm = "centred"
+[score]
+scorer = "nearest"
+point = "mean"

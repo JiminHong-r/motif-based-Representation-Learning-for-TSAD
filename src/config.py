@@ -7,6 +7,7 @@
     backend = "LoCoMotif"           # src/backends.py: factories() for U, multivariate_factories() for M
     params = { rho = 0.6 }          # backend hyperparameters (overrides of its defaults)
     source = "train"                # "train": the tr_ prefix (at least 4 x min length) | "whole": entire series
+    train_scale = 1.0               # training part = train_scale x the tr_ prefix (sensitivity of the training length)
     random_fractions = [1.0]        # random-bank controls: share of occurrences moved (1.0 = random bank)
     segment_len = 8000              # discovery runs on segments of this length
     wlen_floor = 16                 # motif length = max(floor, period) .. factor x that
@@ -38,6 +39,7 @@ class Config:
     backend: str = "LoCoMotif"
     params: dict = field(default_factory=dict)
     source: str = "train"
+    train_scale: float = 1.0
     random_fractions: list = field(default_factory=lambda: [1.0])
     segment_len: int = 8000
     wlen_floor: int = 16
@@ -65,6 +67,8 @@ class Config:
     def bank_label(self) -> str:
         """Backend + every discovery setting that changes the bank: names its motif cache."""
         extra = dict(self.params)
+        if self.train_scale != 1.0:
+            extra["train_scale"] = self.train_scale
         if self.segment_len != 8000:
             extra["segment_len"] = self.segment_len
         if (self.wlen_floor, self.wlen_factor) != (16, 2.0):
