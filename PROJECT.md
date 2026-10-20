@@ -55,6 +55,11 @@ LoCoMotif with `rho=0.6` (other settings default), motifs discovered on the trai
 
 **Failure rule (fixed 2026-10-03 before any Eval score was read):** at 263/350, LoCoMotif found no motifs in the training part of 17 series (SMAP 4, MSL 3, SMD 3, WSD 2, IOPS 2, Stock 1, Daphnet 1, LTDB 1). Headline number counts every failure as VUS-PR 0 — TSB-AD's own benchmark script does the same (`list_w = [0]*9` on exception). Also reported: mean over successful series with the failure count. The configuration is not changed because of Eval failures.
 
+**Frozen cycle-2 univariate configuration (2026-10-20, chosen on dev_small — do not change after the held-out run):** `configs/U-STOMP-mean.toml`.
+Period: TSB-AD `find_length_rank` (rank 1), motif length period..2×period, floor 16 → bank: STOMP (tsmd `MatrixProfile`, n_patterns 10, radius_ratio 3, UnitEuclidean) on the training part (`tr_` prefix, at least 4 × min motif length), 8000-point segments → per-motif distance of every window (mean-centred, self-matches excluded), each motif column scaled 0–1 on the training windows → score = distance to the nearest motif → each point = **mean** over its covering windows → min-max → VUS-PR. Random bank (seed 2024) on every series; failures count as 0.
+dev_small (150): **0.366** (random 0.322; KShapeAD 0.349, MatrixProfile 0.333, KMeansAD 0.330), 0 failures. Per type: non-periodic 0.573 (KShapeAD 0.041), periodic 0.261 (0.343), point anomalies 0.402 (0.463). Weak: UCR 0.088, NAB 0.253.
+**Held-out rule (written before the run):** run this configuration and KShapeAD / MatrixProfile / KMeansAD on the 370 dev series outside dev_small (`--split dev --files <those 370>` → `results/runs/U-STOMP-mean/dev.csv`, `results/baseline_U_dev_metrics.csv`). The result is reported as is, whatever it is; the configuration is not changed because of it. Eval (350) once more at the end of cycle 2 with this configuration.
+
 ## 5. Research plan, October 2026 – February 2027 (cycle 2)
 
 Cycle 1 (Sept) built the pipeline, froze one configuration and ran Eval once: 0.333, rank 22/42, motif bank = random bank. Cycle 2 uses the remaining ~5 months to answer the RQs properly and push "how far can a motif bank go" — with a larger development set so Eval stays clean.
