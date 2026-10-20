@@ -1,4 +1,4 @@
-# mSTAMP motifs on all dimensions
+# Cycle-2 multivariate candidate (2026-10-20): frozen univariate pipeline, bank = mSTAMP over all dimensions on the training part.
 name = "M-mSTAMP-all-mean"
 [data]
 dataset = "M"
