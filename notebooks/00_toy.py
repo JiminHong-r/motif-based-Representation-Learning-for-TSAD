@@ -5,7 +5,7 @@ and five planted anomalies of different types. Runs the same steps as run.py —
 period → motif bank on the training part → per-motif distances → score →
 VUS-PR, plus the random bank — and plots signal, bank and scores.
 
-    .venv/bin/python notebooks/00_toy.py [config.toml]   # default: the frozen U-STOMP-mean → results/toy.png
+    .venv/bin/python notebooks/00_toy.py [config.toml]   # default: the frozen U-STOMP-mean-split → results/toy.png
 
 Runs in seconds on a laptop; no data download needed.
 """
@@ -49,7 +49,7 @@ def toy_series(seed: int = 0):
 
 
 def main():
-    cfg = Config.load(sys.argv[1]) if len(sys.argv) > 1 else Config.load(ROOT / "configs" / "U-STOMP-mean.toml")
+    cfg = Config.load(sys.argv[1]) if len(sys.argv) > 1 else Config.load(ROOT / "configs" / "U-STOMP-mean-split.toml")
     x, labels, anomalies = toy_series()
     period = period_of(x)
     bounds = window_bounds(period, cfg.wlen_floor, cfg.wlen_factor)
